@@ -231,9 +231,6 @@ npm run type-check   # TypeScript type checking
 
 MIT License - feel free to use this project for personal or commercial purposes.
 
-## 👨‍💻 Author
-
-Built by [Anjola Adeuyi](https://www.anjolaadeuyi.com/) - Senior Full-Stack + AI Engineer
 
 ---
 
