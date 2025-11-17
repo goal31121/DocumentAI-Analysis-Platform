@@ -4,7 +4,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
-    provider: 'postgres',
+    provider: 'pg',
   }),
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   basePath: '/api/auth',
