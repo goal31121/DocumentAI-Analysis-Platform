@@ -1,6 +1,7 @@
 import { generateEmbeddings, generateEmbeddingsBatch } from './embeddings';
 import { queryVectors, upsertVectors, VectorMetadata } from '../vector/pinecone';
 import { DocumentChunk } from './chunking';
+import { generateResponse, ModelOptions } from './model-selector';
 import { nanoid } from 'nanoid';
 
 /**
@@ -14,6 +15,7 @@ export interface RAGResult {
     metadata: VectorMetadata;
   }>;
   context: string;
+  model?: string; // Which AI model was used
 }
 
 /**
@@ -25,6 +27,7 @@ export interface RAGQueryOptions {
   topK?: number;
   minScore?: number;
   includeMetadata?: boolean;
+  modelOptions?: ModelOptions;
 }
 
 /**
@@ -41,7 +44,7 @@ export async function queryDocuments(query: string, options: RAGQueryOptions = {
     throw new Error('Query cannot be empty');
   }
 
-  const { documentIds, userId, topK = 5, minScore = 0.5, includeMetadata = true } = options;
+  const { documentIds, userId, topK = 5, minScore = 0.5 } = options;
 
   try {
     // Step 1: Generate embedding for the query
@@ -76,13 +79,32 @@ export async function queryDocuments(query: string, options: RAGQueryOptions = {
     // Combine chunks into context, ordered by relevance score
     const context = sources.map((source, index) => `[${index + 1}] ${source.text}`).join('\n\n');
 
-    // Step 6: Return structured result
-    // Note: The actual LLM call to generate the answer will be added in Day 12-14
-    // For now, we return the context as a placeholder answer
+    // Step 6: Generate answer using LLM with RAG prompt
+    const { modelOptions } = options;
+    const prompt = buildRAGPrompt(query, context);
+
+    let answer: string;
+    let modelUsed: string | undefined;
+
+    try {
+      const modelResponse = await generateResponse(prompt, modelOptions);
+      answer = modelResponse.text;
+      modelUsed = modelResponse.model;
+
+      if (!answer || answer.trim().length === 0) {
+        throw new Error('Empty response from LLM');
+      }
+    } catch (error) {
+      // Fallback to context-only response if LLM fails
+      console.error('LLM generation failed, using context-only response:', error);
+      answer = `Based on the retrieved context, here are the relevant passages:\n\n${context}`;
+    }
+
     return {
-      answer: `Based on the retrieved context, here are the relevant passages:\n\n${context}`,
+      answer,
       sources,
       context,
+      model: modelUsed,
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -161,7 +183,7 @@ export async function indexDocumentChunks(
 
 /**
  * Build a prompt template for LLM queries
- * This will be used when integrating with LLMs in Day 12-14
+ * This will be used when integrating with LLMs
  *
  * @param query - The user's query
  * @param context - The retrieved context from vector search
