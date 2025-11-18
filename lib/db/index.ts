@@ -1,13 +1,26 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from './schema';
+import { users, sessions, accounts, verifications, documents, conversations, messages, usage } from './schema';
 
 if (!process.env.DATABASE_URL) {
   console.warn('DATABASE_URL environment variable is not set. Database operations will fail.');
 }
 
-const client = process.env.DATABASE_URL ? postgres(process.env.DATABASE_URL) : (null as any);
+const schema = {
+  users,
+  sessions,
+  accounts,
+  verifications,
+  documents,
+  conversations,
+  messages,
+  usage,
+};
 
-export const db = client ? drizzle(client, { schema }) : (null as any);
+const client = process.env.DATABASE_URL
+  ? postgres(process.env.DATABASE_URL)
+  : (null as unknown as ReturnType<typeof postgres>);
+
+export const db = client ? drizzle(client, { schema }) : (null as unknown as ReturnType<typeof drizzle>);
 
 export type Database = typeof db;
