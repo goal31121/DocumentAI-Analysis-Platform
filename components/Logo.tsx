@@ -8,6 +8,8 @@ export function Logo({ className = 'h-8 w-8' }: { className?: string }) {
         alt="DocAI Logo"
         width={32}
         height={32}
+        loading="eager"
+        priority
         className={`${className} dark:hidden`}
       />
       <Image
@@ -15,6 +17,8 @@ export function Logo({ className = 'h-8 w-8' }: { className?: string }) {
         alt="DocAI Logo"
         width={32}
         height={32}
+        loading="eager"
+        priority
         className={`${className} hidden dark:block`}
       />
     </>
