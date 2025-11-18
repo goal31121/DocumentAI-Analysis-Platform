@@ -3,7 +3,7 @@ import { relations } from 'drizzle-orm';
 
 // Users table (Better-Auth will use this)
 export const users = pgTable('user', {
-  id: uuid('id').primaryKey().defaultRandom(),
+  id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
@@ -15,7 +15,7 @@ export const users = pgTable('user', {
 // Sessions table (Better-Auth)
 export const sessions = pgTable('session', {
   id: text('id').primaryKey(),
-  userId: uuid('user_id')
+  userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   expiresAt: timestamp('expires_at').notNull(),
@@ -29,7 +29,7 @@ export const sessions = pgTable('session', {
 // Accounts table (Better-Auth - for OAuth providers)
 export const accounts = pgTable('account', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
+  userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   accountId: text('account_id').notNull(),
@@ -58,7 +58,7 @@ export const verifications = pgTable('verification', {
 // Documents table
 export const documents = pgTable('document', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
+  userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   fileName: text('file_name').notNull(),
@@ -74,7 +74,7 @@ export const documents = pgTable('document', {
 // Conversations table (for Q&A history)
 export const conversations = pgTable('conversation', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
+  userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   documentId: uuid('document_id').references(() => documents.id, { onDelete: 'cascade' }),
@@ -99,7 +99,7 @@ export const messages = pgTable('message', {
 // Usage tracking table
 export const usage = pgTable('usage', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
+  userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   documentId: uuid('document_id').references(() => documents.id, { onDelete: 'set null' }),
