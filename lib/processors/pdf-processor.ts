@@ -1,5 +1,4 @@
 import { getFileFromS3 } from '../storage/s3';
-import { PDFParse } from 'pdf-parse';
 
 /**
  * PDF processing result
@@ -19,12 +18,27 @@ export interface PDFProcessingResult {
 }
 
 /**
+ * Dynamically import pdf-parse to avoid webpack bundling issues
+ * This loads the module only at runtime, not at build time
+ * Using Function constructor to prevent webpack from analyzing the import
+ */
+async function getPDFParse() {
+  // Use Function constructor to create a dynamic import that webpack can't analyze
+  // This ensures the module is only loaded at runtime
+  const importModule = new Function('specifier', 'return import(specifier)');
+  const pdfParseModule = await importModule('pdf-parse');
+  return pdfParseModule.PDFParse;
+}
+
+/**
  * Process a PDF file and extract text content
  * Uses pdf-parse v2 API with PDFParse class
  * @param fileBuffer - PDF file buffer
  * @returns Processing result with extracted text and metadata
  */
 export async function processPDF(fileBuffer: Buffer): Promise<PDFProcessingResult> {
+  // Dynamically import PDFParse to avoid webpack bundling issues
+  const PDFParse = await getPDFParse();
   const parser = new PDFParse({ data: fileBuffer });
 
   try {
