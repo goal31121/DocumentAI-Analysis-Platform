@@ -1,6 +1,9 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+// Note: In Next.js runtime, environment variables are automatically loaded.
+// For standalone scripts, import '../scripts/load-env' at the top of the script file.
+
 if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
   console.warn('AWS credentials not configured. File uploads will not work.');
 }
