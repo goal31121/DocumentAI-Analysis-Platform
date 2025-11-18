@@ -7,6 +7,7 @@ import { Logo } from '@/components/Logo';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -56,6 +57,7 @@ export function Navigation() {
 
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex items-center space-x-3">
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 asChild
@@ -113,6 +115,9 @@ export function Navigation() {
                     Demo
                   </Link>
                   <div className="pt-4 border-t space-y-2">
+                    <div className="flex justify-center pb-2">
+                      <ThemeToggle />
+                    </div>
                     <Button
                       variant="outline"
                       className="w-full"

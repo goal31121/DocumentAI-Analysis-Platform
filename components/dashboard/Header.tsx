@@ -16,6 +16,7 @@ import { Search, Bell, LogOut, User, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function Header() {
   const router = useRouter();
@@ -42,6 +43,8 @@ export function Header() {
         </div>
 
         <div className="flex items-center space-x-3">
+          <ThemeToggle />
+
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
