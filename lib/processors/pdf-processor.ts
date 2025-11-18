@@ -1,15 +1,5 @@
 import { getFileFromS3 } from '../storage/s3';
-
-// Dynamic import for pdf-parse to handle ESM/CommonJS compatibility
-let pdfParseModule: any = null;
-
-async function getPdfParse() {
-  if (!pdfParseModule) {
-    pdfParseModule = await import('pdf-parse');
-  }
-  // pdf-parse exports PDFParse as named export, but also has default
-  return pdfParseModule.default || pdfParseModule.PDFParse || pdfParseModule;
-}
+import { PDFParse } from 'pdf-parse';
 
 /**
  * PDF processing result
@@ -30,25 +20,37 @@ export interface PDFProcessingResult {
 
 /**
  * Process a PDF file and extract text content
+ * Uses pdf-parse v2 API with PDFParse class
  * @param fileBuffer - PDF file buffer
  * @returns Processing result with extracted text and metadata
  */
 export async function processPDF(fileBuffer: Buffer): Promise<PDFProcessingResult> {
+  const parser = new PDFParse({ data: fileBuffer });
+
   try {
-    const pdfParse = await getPdfParse();
-    const pdfData = await pdfParse(fileBuffer);
+    // Extract text using v2 API
+    const textResult = await parser.getText();
+
+    // Extract metadata/info
+    const infoResult = await parser.getInfo({ parsePageInfo: true });
+
+    // Access metadata from InfoResult.info (PDF Info dictionary)
+    const info = infoResult.info || {};
+
+    // Get dates from DateNode helper
+    const dateNode = infoResult.getDateNode();
 
     return {
-      text: pdfData.text,
-      pageCount: pdfData.numpages,
+      text: textResult.text,
+      pageCount: infoResult.total || textResult.pages?.length || 0,
       metadata: {
-        title: pdfData.info?.Title,
-        author: pdfData.info?.Author,
-        subject: pdfData.info?.Subject,
-        creator: pdfData.info?.Creator,
-        producer: pdfData.info?.Producer,
-        creationDate: pdfData.info?.CreationDate ? new Date(pdfData.info.CreationDate) : undefined,
-        modificationDate: pdfData.info?.ModDate ? new Date(pdfData.info.ModDate) : undefined,
+        title: info?.Title,
+        author: info?.Author,
+        subject: info?.Subject,
+        creator: info?.Creator,
+        producer: info?.Producer,
+        creationDate: dateNode?.CreationDate || undefined,
+        modificationDate: dateNode?.ModDate || undefined,
       },
     };
   } catch (error) {
@@ -56,6 +58,9 @@ export async function processPDF(fileBuffer: Buffer): Promise<PDFProcessingResul
       throw new Error(`Failed to process PDF: ${error.message}`);
     }
     throw new Error('Failed to process PDF: Unknown error');
+  } finally {
+    // Always destroy parser to free memory
+    await parser.destroy();
   }
 }
 
