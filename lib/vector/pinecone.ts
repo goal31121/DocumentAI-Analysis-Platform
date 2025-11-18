@@ -1,4 +1,4 @@
-import { Pinecone } from '@pinecone-database/pinecone';
+import { Pinecone, RecordMetadata } from '@pinecone-database/pinecone';
 
 // Note: In Next.js runtime, environment variables are automatically loaded.
 // For standalone scripts, import '../scripts/load-env' at the top of the script file.
@@ -51,6 +51,8 @@ export async function getPineconeIndex() {
 
 /**
  * Vector metadata structure for document chunks
+ * All values must be compatible with Pinecone's RecordMetadataValue:
+ * string | boolean | number | Array<string>
  */
 export interface VectorMetadata {
   documentId: string;
@@ -61,7 +63,6 @@ export interface VectorMetadata {
   fileType?: string;
   userId: string;
   createdAt?: string;
-  [key: string]: unknown;
 }
 
 /**
@@ -87,7 +88,10 @@ export async function upsertVectors(
     const batchSize = 100;
     for (let i = 0; i < vectors.length; i += batchSize) {
       const batch = vectors.slice(i, i + batchSize);
-      await index.upsert(batch);
+      // Type assertion: VectorMetadata is compatible with RecordMetadata
+      // All values are string | number | boolean | Array<string> (RecordMetadataValue)
+      // Using double assertion to satisfy TypeScript's structural typing
+      await index.upsert(batch as unknown as Array<{ id: string; values: number[]; metadata: RecordMetadata }>);
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -130,7 +134,9 @@ export async function queryVectors(
     return queryResponse.matches.map((match) => ({
       id: match.id || '',
       score: match.score || 0,
-      metadata: (match.metadata as VectorMetadata) || {},
+      // Type assertion: RecordMetadata from Pinecone is compatible with VectorMetadata
+      // Using double assertion to satisfy TypeScript's structural typing
+      metadata: (match.metadata as unknown as VectorMetadata) || ({} as VectorMetadata),
     }));
   } catch (error) {
     if (error instanceof Error) {
