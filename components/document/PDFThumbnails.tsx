@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { FileText } from 'lucide-react';
@@ -17,6 +17,17 @@ export interface PDFThumbnailsProps {
 export function PDFThumbnails({ totalPages, currentPage, onPageSelect, pdfUrl, className }: PDFThumbnailsProps) {
   const [thumbnails, setThumbnails] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to current page thumbnail when currentPage changes
+  useEffect(() => {
+    if (containerRef.current && currentPage > 0) {
+      const thumbnailElement = containerRef.current.querySelector(`[data-page="${currentPage}"]`) as HTMLElement;
+      if (thumbnailElement) {
+        thumbnailElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [currentPage]);
 
   useEffect(() => {
     const loadThumbnails = async () => {
@@ -111,7 +122,10 @@ export function PDFThumbnails({ totalPages, currentPage, onPageSelect, pdfUrl, c
         </h3>
       </div>
       <ScrollArea className="h-full">
-        <div className="p-2 space-y-2">
+        <div
+          className="p-2 space-y-2"
+          ref={containerRef}
+        >
           {loading ? (
             <div className="text-sm text-muted-foreground text-center py-8">Loading thumbnails...</div>
           ) : (
@@ -122,12 +136,13 @@ export function PDFThumbnails({ totalPages, currentPage, onPageSelect, pdfUrl, c
               return (
                 <div
                   key={pageNum}
+                  data-page={pageNum}
                   onClick={() => onPageSelect(pageNum)}
                   onMouseEnter={() => loadThumbnail(pageNum)}
                   className={cn(
                     'cursor-pointer rounded-md border-2 transition-all p-2',
                     isCurrentPage
-                      ? 'border-primary bg-primary/10'
+                      ? 'border-primary bg-primary/10 shadow-md'
                       : 'border-border hover:border-primary/50 hover:bg-accent/50'
                   )}
                 >

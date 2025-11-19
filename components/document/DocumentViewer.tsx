@@ -37,6 +37,12 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
   const [workerReady, setWorkerReady] = useState(false);
   const [targetPage, setTargetPage] = useState<number | null>(null); // For programmatic page navigation
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastZoomRef = useRef<number>(1); // Track last zoom to prevent unnecessary updates
+
+  // Initialize zoom ref
+  useEffect(() => {
+    lastZoomRef.current = zoom;
+  }, [zoom]);
   const viewerRef = useRef<{
     zoomTo?: (scale: number) => void;
     rotate?: (angle: number) => void;
@@ -109,18 +115,23 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
   }, [pdfUrl, workerReady]);
 
   const handlePageChange = (e: { currentPage: number }) => {
-    const newPage = e.currentPage;
-    setCurrentPage(newPage);
-    // Reset targetPage after navigation completes to prevent unnecessary re-renders
-    if (targetPage !== null && newPage === targetPage) {
-      setTargetPage(null);
+    const newPage = Math.max(1, Math.min(e.currentPage || 1, totalPages || 1)); // Clamp between 1 and totalPages
+    // Only update if page actually changed (avoid infinite loops)
+    if (newPage !== currentPage && newPage > 0) {
+      setCurrentPage(newPage);
+      // Reset targetPage after navigation completes to prevent unnecessary re-renders
+      if (targetPage !== null && newPage === targetPage) {
+        setTargetPage(null);
+      }
     }
   };
 
   const handleZoomChange = (newZoom: number) => {
-    setZoom(newZoom);
-    if (viewerRef.current?.zoomTo) {
-      viewerRef.current.zoomTo(newZoom);
+    const roundedZoom = Math.round(newZoom * 10) / 10; // Round to 1 decimal place
+    // Only update if zoom actually changed significantly (avoid infinite loops)
+    if (Math.abs(roundedZoom - lastZoomRef.current) > 0.05) {
+      setZoom(roundedZoom);
+      lastZoomRef.current = roundedZoom;
     }
   };
 
@@ -156,8 +167,6 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     console.log('Page selected:', page);
     setCurrentPage(page);
     setTargetPage(page); // Trigger navigation to this page
-    // Force re-render with new initialPage by updating key
-    // The PDFViewer will re-render with the new initialPage
   };
 
   const handleFullscreen = () => {
@@ -252,9 +261,7 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                           Accept: 'application/pdf',
                         }}
                         withCredentials={true}
-                        onDocumentLoad={(e) => {
-                          console.log('PDF document loaded event:', e);
-                          console.log('Event keys:', Object.keys(e || {}));
+                        onDocumentLoad={(e: { doc?: { numPages?: number }; file?: unknown }) => {
                           try {
                             // Clear timeout since PDF loaded successfully
                             if (loadingTimeoutRef.current) {
@@ -263,10 +270,15 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                             }
 
                             // Event structure: {doc: PDFDocumentProxy, file: {...}}
-                            const doc = (e as any)?.doc;
+                            const doc = e?.doc;
                             if (doc && typeof doc.numPages === 'number') {
-                              console.log(`PDF loaded successfully: ${doc.numPages} pages`);
-                              setTotalPages(doc.numPages);
+                              const numPages = doc.numPages;
+                              console.log(`PDF loaded successfully: ${numPages} pages`);
+                              setTotalPages(numPages);
+                              // Ensure currentPage is valid
+                              if (currentPage < 1 || currentPage > numPages) {
+                                setCurrentPage(1);
+                              }
                               setLoading(false);
                             } else {
                               console.warn('Unexpected document load event structure:', {
@@ -285,14 +297,9 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                           }
                         }}
                         onPageChange={handlePageChange}
-                        initialPage={targetPage !== null ? targetPage - 1 : currentPage - 1}
+                        initialPage={targetPage !== null ? Math.max(0, targetPage - 1) : Math.max(0, currentPage - 1)}
                         key={targetPage !== null ? `pdf-page-${targetPage}` : 'pdf-viewer'}
                         defaultScale={zoom}
-                        onZoom={(e: { scale: number }) => {
-                          if (e?.scale) {
-                            setZoom(e.scale);
-                          }
-                        }}
                         renderError={(error) => {
                           console.error('PDF render error:', error);
                           console.error('Error details:', {
