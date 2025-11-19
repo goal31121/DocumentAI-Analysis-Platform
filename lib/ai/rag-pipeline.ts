@@ -1,7 +1,8 @@
 import { generateEmbeddings, generateEmbeddingsBatch } from './embeddings';
-import { queryVectors, upsertVectors, VectorMetadata } from '../vector/pinecone';
+import { queryVectors, hybridSearch, upsertVectors, VectorMetadata } from '../vector/pinecone';
 import { DocumentChunk } from './chunking';
 import { generateResponse, ModelOptions } from './model-selector';
+import { preprocessQuery } from './query-preprocessing';
 import { nanoid } from 'nanoid';
 
 /**
@@ -28,6 +29,9 @@ export interface RAGQueryOptions {
   minScore?: number;
   includeMetadata?: boolean;
   modelOptions?: ModelOptions;
+  useHybridSearch?: boolean; // Enable hybrid search (semantic + keyword)
+  semanticWeight?: number; // Weight for semantic score in hybrid search (default: 0.7)
+  keywordWeight?: number; // Weight for keyword score in hybrid search (default: 0.3)
 }
 
 /**
@@ -44,13 +48,25 @@ export async function queryDocuments(query: string, options: RAGQueryOptions = {
     throw new Error('Query cannot be empty');
   }
 
-  const { documentIds, userId, topK = 5, minScore = 0.3 } = options;
+  const {
+    documentIds,
+    userId,
+    topK = 5,
+    minScore = 0.3,
+    useHybridSearch = true, // Enable hybrid search by default
+    semanticWeight = 0.7,
+    keywordWeight = 0.3,
+  } = options;
 
   try {
-    // Step 1: Generate embedding for the query
+    // Step 1: Preprocess query (remove stop words, extract keywords)
+    const preprocessed = preprocessQuery(query);
+    console.log(`Query preprocessing: "${query}" -> keywords: [${preprocessed.keywords.join(', ')}]`);
+
+    // Step 2: Generate embedding for the query
     const queryEmbedding = await generateEmbeddings(query);
 
-    // Step 2: Build metadata filter if documentIds or userId provided
+    // Step 3: Build metadata filter if documentIds or userId provided
     const filter: Record<string, unknown> = {};
     if (documentIds && documentIds.length > 0) {
       filter.documentId = { $in: documentIds };
@@ -59,10 +75,34 @@ export async function queryDocuments(query: string, options: RAGQueryOptions = {
       filter.userId = { $eq: userId };
     }
 
-    // Step 3: Query Pinecone for relevant chunks
-    const results = await queryVectors(queryEmbedding, topK, Object.keys(filter).length > 0 ? filter : undefined);
+    // Step 4: Query Pinecone using hybrid search or semantic search
+    let results: Array<{ id: string; score: number; metadata: VectorMetadata }>;
 
-    // Step 4: Filter by minimum score threshold with progressive fallback
+    if (useHybridSearch && preprocessed.keywords.length > 0) {
+      // Use hybrid search: combines semantic similarity with keyword matching
+      const hybridResults = await hybridSearch(
+        queryEmbedding,
+        preprocessed.keywords,
+        topK,
+        Object.keys(filter).length > 0 ? filter : undefined,
+        semanticWeight,
+        keywordWeight
+      );
+
+      // Convert hybrid results to standard format
+      results = hybridResults.map((result) => ({
+        id: result.id,
+        score: result.score,
+        metadata: result.metadata,
+      }));
+
+      console.log(`Hybrid search: semantic weight=${semanticWeight}, keyword weight=${keywordWeight}`);
+    } else {
+      // Fallback to semantic-only search
+      results = await queryVectors(queryEmbedding, topK, Object.keys(filter).length > 0 ? filter : undefined);
+    }
+
+    // Step 5: Filter by minimum score threshold with progressive fallback
     // This handles generic queries that have low semantic similarity scores
     let filteredResults = results.filter((result) => result.score >= minScore);
 
@@ -93,7 +133,7 @@ export async function queryDocuments(query: string, options: RAGQueryOptions = {
       throw new Error('No relevant document chunks found for the query');
     }
 
-    // Step 5: Build context from retrieved chunks
+    // Step 6: Build context from retrieved chunks
     const sources = filteredResults.map((result) => ({
       text: result.metadata.text || '',
       score: result.score,
@@ -103,7 +143,7 @@ export async function queryDocuments(query: string, options: RAGQueryOptions = {
     // Combine chunks into context, ordered by relevance score
     const context = sources.map((source, index) => `[${index + 1}] ${source.text}`).join('\n\n');
 
-    // Step 6: Generate answer using LLM with RAG prompt
+    // Step 7: Generate answer using LLM with RAG prompt
     const { modelOptions } = options;
     const prompt = buildRAGPrompt(query, context);
 

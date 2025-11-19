@@ -147,6 +147,76 @@ export async function queryVectors(
 }
 
 /**
+ * Hybrid search combining semantic (vector) search with keyword matching
+ * This improves results for generic queries by boosting chunks that contain query keywords
+ *
+ * @param queryVector - The query embedding vector for semantic search
+ * @param queryKeywords - Keywords extracted from the query for keyword matching
+ * @param topK - Number of results to return (default: 5)
+ * @param filter - Optional metadata filter
+ * @param semanticWeight - Weight for semantic score (default: 0.7)
+ * @param keywordWeight - Weight for keyword score (default: 0.3)
+ * @returns Array of matching vectors with combined scores
+ */
+export async function hybridSearch(
+  queryVector: number[],
+  queryKeywords: string[],
+  topK: number = 5,
+  filter?: Record<string, unknown>,
+  semanticWeight: number = 0.7,
+  keywordWeight: number = 0.3
+): Promise<
+  Array<{ id: string; score: number; semanticScore: number; keywordScore: number; metadata: VectorMetadata }>
+> {
+  if (!queryVector || queryVector.length === 0) {
+    throw new Error('Query vector cannot be empty');
+  }
+
+  // Normalize weights
+  const totalWeight = semanticWeight + keywordWeight;
+  const normalizedSemanticWeight = semanticWeight / totalWeight;
+  const normalizedKeywordWeight = keywordWeight / totalWeight;
+
+  // Step 1: Perform semantic search (get more results than needed for re-ranking)
+  const semanticResults = await queryVectors(queryVector, topK * 2, filter);
+
+  if (semanticResults.length === 0) {
+    return [];
+  }
+
+  // Step 2: Calculate keyword scores and combine with semantic scores
+  const { calculateKeywordScore } = await import('../ai/query-preprocessing');
+
+  const hybridResults = semanticResults.map((result) => {
+    const text = result.metadata.text || '';
+    const keywordScore = queryKeywords.length > 0 ? calculateKeywordScore(queryKeywords, text) : 0;
+
+    // Combine scores: weighted average of semantic and keyword scores
+    const combinedScore = normalizedSemanticWeight * result.score + normalizedKeywordWeight * keywordScore;
+
+    return {
+      id: result.id,
+      score: combinedScore,
+      semanticScore: result.score,
+      keywordScore,
+      metadata: result.metadata,
+    };
+  });
+
+  // Step 3: Sort by combined score and return top K
+  return hybridResults
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .map((result) => ({
+      id: result.id,
+      score: result.score,
+      semanticScore: result.semanticScore,
+      keywordScore: result.keywordScore,
+      metadata: result.metadata,
+    }));
+}
+
+/**
  * Delete vectors by IDs
  * @param ids - Array of vector IDs to delete
  * @throws Error if deletion fails
