@@ -35,6 +35,10 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const [targetPage, setTargetPage] = useState<number | null>(null);
+  const intersectionObserverRef = useRef<IntersectionObserver | null>(null);
+  const isNavigatingRef = useRef<boolean>(false);
+  const scrollUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentPageRef = useRef<number>(currentPage);
 
   // Configure PDF.js worker
   useEffect(() => {
@@ -100,19 +104,147 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     }
   }, [pdfUrl, workerReady]);
 
-  // Cleanup timeouts on unmount
+  // Setup Intersection Observer to detect current page from scroll
+  useEffect(() => {
+    if (loading || totalPages === 0 || !workerReady) return;
+
+    // Clean up existing observer
+    if (intersectionObserverRef.current) {
+      intersectionObserverRef.current.disconnect();
+      intersectionObserverRef.current = null;
+    }
+
+    // Clear any pending scroll updates
+    if (scrollUpdateTimeoutRef.current) {
+      clearTimeout(scrollUpdateTimeoutRef.current);
+      scrollUpdateTimeoutRef.current = null;
+    }
+
+    const setupScrollObserver = () => {
+      const scrollContainer = document.querySelector('.rpv-core__viewer') as HTMLElement;
+      if (!scrollContainer) return;
+
+      const pageElements = Array.from(
+        document.querySelectorAll('[role="region"][aria-label^="Page"]')
+      ) as HTMLElement[];
+
+      if (pageElements.length === 0) return;
+
+      // Create Intersection Observer to track which page is most visible
+      const observer = new IntersectionObserver(
+        (entries) => {
+          // Don't update if we're programmatically navigating
+          if (isNavigatingRef.current) return;
+
+          // Clear any pending update
+          if (scrollUpdateTimeoutRef.current) {
+            clearTimeout(scrollUpdateTimeoutRef.current);
+          }
+
+          // Debounce the update to prevent excessive state changes
+          scrollUpdateTimeoutRef.current = setTimeout(() => {
+            if (isNavigatingRef.current) return;
+
+            // Find the page with the highest visibility
+            let maxVisibility = 0;
+            const currentPageValue = currentPageRef.current;
+            let mostVisiblePage = currentPageValue;
+
+            entries.forEach((entry) => {
+              const pageLabel = (entry.target as HTMLElement).getAttribute('aria-label');
+              if (!pageLabel) return;
+
+              const pageNum = parseInt(pageLabel.replace('Page ', ''));
+              if (isNaN(pageNum)) return;
+
+              // Calculate visibility percentage
+              const boundingRect = entry.boundingClientRect;
+              const rootRect = entry.rootBounds;
+
+              if (rootRect && boundingRect) {
+                // Calculate how much of the page is visible in the viewport
+                const visibleHeight =
+                  Math.min(boundingRect.bottom, rootRect.bottom) - Math.max(boundingRect.top, rootRect.top);
+                const visibilityPercent = (visibleHeight / boundingRect.height) * 100;
+
+                // Prefer pages with higher visibility, and if equal, prefer the one closer to center
+                if (
+                  visibilityPercent > maxVisibility ||
+                  (visibilityPercent === maxVisibility &&
+                    Math.abs(pageNum - currentPageValue) < Math.abs(mostVisiblePage - currentPageValue))
+                ) {
+                  maxVisibility = visibilityPercent;
+                  mostVisiblePage = pageNum;
+                }
+              }
+            });
+
+            // Update current page if a different page is now most visible
+            if (mostVisiblePage !== currentPageValue && mostVisiblePage > 0 && mostVisiblePage <= totalPages) {
+              setCurrentPage(mostVisiblePage);
+            }
+          }, 150); // 150ms debounce
+        },
+        {
+          root: scrollContainer,
+          rootMargin: '-20% 0px -20% 0px', // Only consider pages in the center 60% of viewport
+          threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        }
+      );
+
+      // Observe all page elements
+      pageElements.forEach((pageElement) => {
+        observer.observe(pageElement);
+      });
+
+      intersectionObserverRef.current = observer;
+    };
+
+    // Wait for pages to render before setting up observer
+    const setupTimeout = setTimeout(() => {
+      setupScrollObserver();
+    }, 500);
+
+    return () => {
+      clearTimeout(setupTimeout);
+      if (scrollUpdateTimeoutRef.current) {
+        clearTimeout(scrollUpdateTimeoutRef.current);
+      }
+      if (intersectionObserverRef.current) {
+        intersectionObserverRef.current.disconnect();
+        intersectionObserverRef.current = null;
+      }
+    };
+    // Note: currentPage is intentionally NOT in dependencies to avoid recreating observer on every page change
+  }, [loading, totalPages, workerReady]);
+
+  // Cleanup timeouts and observers on unmount
   useEffect(() => {
     return () => {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
+      if (scrollUpdateTimeoutRef.current) {
+        clearTimeout(scrollUpdateTimeoutRef.current);
+      }
+      if (intersectionObserverRef.current) {
+        intersectionObserverRef.current.disconnect();
+      }
     };
   }, []);
 
+  // Keep ref in sync with currentPage state
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
   const handlePageChange = (e: { currentPage: number }) => {
-    const newPage = Math.max(1, Math.min(e.currentPage || 1, totalPages || 1));
-    if (newPage !== currentPage && newPage > 0) {
-      setCurrentPage(newPage);
+    // Only update if not programmatically navigating (to avoid conflicts)
+    if (!isNavigatingRef.current) {
+      const newPage = Math.max(1, Math.min(e.currentPage || 1, totalPages || 1));
+      if (newPage !== currentPage && newPage > 0) {
+        setCurrentPage(newPage);
+      }
     }
   };
 
@@ -130,40 +262,86 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     // Rotation will be handled via CSS transform on the container
   };
 
-  // Navigate to a specific page by scrolling to it
+  // Navigate to a specific page by scrolling to it with retry mechanism
   useEffect(() => {
     if (targetPage !== null && totalPages > 0 && !loading) {
-      // Wait for PDF to render, then scroll to the target page
-      const scrollTimeout = setTimeout(() => {
-        try {
-          // Find the page element by aria-label
-          const pageElement = document.querySelector(`[role="region"][aria-label="Page ${targetPage}"]`) as HTMLElement;
+      isNavigatingRef.current = true;
 
-          if (pageElement) {
-            // Find the scrollable container - use the react-pdf-viewer's viewer class
-            const scrollContainer = document.querySelector('.rpv-core__viewer') as HTMLElement;
+      const scrollToPage = (attempt: number = 1, maxAttempts: number = 3) => {
+        requestAnimationFrame(() => {
+          try {
+            // Find the page element by aria-label
+            const pageElement = document.querySelector(
+              `[role="region"][aria-label="Page ${targetPage}"]`
+            ) as HTMLElement;
 
-            if (scrollContainer) {
-              const containerRect = scrollContainer.getBoundingClientRect();
-              const pageRect = pageElement.getBoundingClientRect();
-              const scrollTop = scrollContainer.scrollTop + (pageRect.top - containerRect.top) - 20; // 20px offset from top
+            if (pageElement) {
+              // Find the scrollable container - use the react-pdf-viewer's viewer class
+              const scrollContainer = document.querySelector('.rpv-core__viewer') as HTMLElement;
 
-              scrollContainer.scrollTo({
-                top: scrollTop,
-                behavior: 'auto', // Instant scroll for better performance
-              });
+              if (scrollContainer) {
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const pageRect = pageElement.getBoundingClientRect();
+                const scrollTop = scrollContainer.scrollTop + (pageRect.top - containerRect.top) - 20; // 20px offset from top
+
+                scrollContainer.scrollTo({
+                  top: scrollTop,
+                  behavior: 'auto', // Instant scroll for better performance
+                });
+
+                // Verify scroll success after a delay
+                setTimeout(() => {
+                  const verifyRect = pageElement.getBoundingClientRect();
+                  const containerVerifyRect = scrollContainer.getBoundingClientRect();
+                  const isVisible =
+                    verifyRect.top < containerVerifyRect.bottom && verifyRect.bottom > containerVerifyRect.top;
+
+                  if (!isVisible && attempt < maxAttempts) {
+                    // Retry with longer delay for pages that haven't rendered yet
+                    const retryDelay = attempt * 300; // 300ms, 600ms, 900ms
+                    setTimeout(() => scrollToPage(attempt + 1, maxAttempts), retryDelay);
+                  } else {
+                    // Navigation complete, wait longer before re-enabling scroll observer
+                    // This prevents the observer from immediately overriding the navigation
+                    setTimeout(() => {
+                      isNavigatingRef.current = false;
+                    }, 300); // Increased from 100ms to 300ms to allow navigation to settle
+                  }
+                }, 100);
+              } else {
+                // Fallback: scroll the page into view
+                pageElement.scrollIntoView({ behavior: 'auto', block: 'start' });
+                setTimeout(() => {
+                  isNavigatingRef.current = false;
+                }, 100);
+              }
+            } else if (attempt < maxAttempts) {
+              // Page element not found, retry with longer delay
+              const retryDelay = attempt * 500; // 500ms, 1000ms, 1500ms for pages beyond viewport
+              setTimeout(() => scrollToPage(attempt + 1, maxAttempts), retryDelay);
             } else {
-              // Fallback: scroll the page into view
-              pageElement.scrollIntoView({ behavior: 'auto', block: 'start' });
+              // Max attempts reached, give up
+              console.warn(`Failed to find page ${targetPage} after ${maxAttempts} attempts`);
+              isNavigatingRef.current = false;
             }
+          } catch (error) {
+            console.warn('Failed to scroll to page:', error);
+            isNavigatingRef.current = false;
           }
-        } catch (error) {
-          console.warn('Failed to scroll to page:', error);
-        }
-        setTargetPage(null);
-      }, 200); // Delay to ensure PDF pages are rendered
+        });
+      };
 
-      return () => clearTimeout(scrollTimeout);
+      // Initial delay - longer for pages beyond initial viewport
+      const initialDelay = targetPage > 5 ? 500 : 200;
+      const scrollTimeout = setTimeout(() => {
+        scrollToPage();
+        setTargetPage(null);
+      }, initialDelay);
+
+      return () => {
+        clearTimeout(scrollTimeout);
+        isNavigatingRef.current = false;
+      };
     }
   }, [targetPage, totalPages, loading]);
 
