@@ -8,11 +8,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
-// Dynamically import PDF viewer to avoid SSR issues
-// Note: CSS is imported separately in globals.css or loaded by the viewer itself
+// Dynamically import PDF viewer and plugins to avoid SSR issues
 const PDFViewer = dynamic(() => import('@react-pdf-viewer/core').then((mod) => mod.Viewer), { ssr: false });
-
 const Worker = dynamic(() => import('@react-pdf-viewer/core').then((mod) => mod.Worker), { ssr: false });
+
+// Page navigation plugin will be initialized in component
 
 export interface DocumentViewerProps {
   pdfUrl: string;
@@ -36,13 +36,38 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
   const [error, setError] = useState<string | null>(null);
   const [workerReady, setWorkerReady] = useState(false);
   const [targetPage, setTargetPage] = useState<number | null>(null); // For programmatic page navigation
+  const [zoomKey, setZoomKey] = useState(0); // Force re-render on zoom change
+  const [pageKey, setPageKey] = useState(0); // Separate key for page navigation
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastZoomRef = useRef<number>(1); // Track last zoom to prevent unnecessary updates
+  const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const targetPageRef = useRef<number | null>(null); // Track target page in ref to avoid closure issues
+  const isNavigatingRef = useRef<boolean>(false); // Flag to prevent onPageChange from interfering during navigation
+  const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const jumpToPageRef = useRef<((pageIndex: number) => void) | null>(null); // Store jumpToPage function from plugin
+  const [plugins, setPlugins] = useState<any[]>([]);
 
   // Initialize zoom ref
   useEffect(() => {
     lastZoomRef.current = zoom;
   }, [zoom]);
+
+  // Initialize page navigation plugin
+  useEffect(() => {
+    if (typeof window !== 'undefined' && plugins.length === 0) {
+      import('@react-pdf-viewer/page-navigation')
+        .then((mod) => {
+          const pluginInstance = mod.pageNavigationPlugin();
+          const { jumpToPage } = pluginInstance;
+          jumpToPageRef.current = jumpToPage;
+          setPlugins([pluginInstance]);
+          console.log('Page navigation plugin initialized');
+        })
+        .catch((err) => {
+          console.warn('Failed to load page-navigation plugin:', err);
+        });
+    }
+  }, [plugins.length]);
   const viewerRef = useRef<{
     zoomTo?: (scale: number) => void;
     rotate?: (angle: number) => void;
@@ -114,14 +139,49 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     }
   }, [pdfUrl, workerReady]);
 
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (zoomTimeoutRef.current) {
+        clearTimeout(zoomTimeoutRef.current);
+      }
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handlePageChange = (e: { currentPage: number }) => {
+    // Ignore page change events during programmatic navigation
+    if (isNavigatingRef.current) {
+      console.log(`Ignoring page change during navigation: ${e.currentPage}, targetPage: ${targetPageRef.current}`);
+      return;
+    }
+
     const newPage = Math.max(1, Math.min(e.currentPage || 1, totalPages || 1)); // Clamp between 1 and totalPages
-    // Only update if page actually changed (avoid infinite loops)
-    if (newPage !== currentPage && newPage > 0) {
-      setCurrentPage(newPage);
-      // Reset targetPage after navigation completes to prevent unnecessary re-renders
-      if (targetPage !== null && newPage === targetPage) {
-        setTargetPage(null);
+    const targetPageToCheck = targetPageRef.current ?? targetPage;
+
+    // If we're navigating to a target page, only accept the change if it matches
+    if (targetPageToCheck !== null) {
+      if (newPage === targetPageToCheck) {
+        console.log(`Navigation complete: reached target page ${newPage}`);
+        setCurrentPage(newPage);
+        // Clear targetPage after a short delay
+        setTimeout(() => {
+          targetPageRef.current = null;
+          setTargetPage(null);
+          isNavigatingRef.current = false;
+        }, 200);
+      } else {
+        // Ignore intermediate page changes during navigation
+        console.log(`Ignoring intermediate page change: ${newPage} (target: ${targetPageToCheck})`);
+        return;
+      }
+    } else {
+      // Normal page change (user scrolling)
+      if (newPage !== currentPage && newPage > 0) {
+        console.log(`Page changed: ${currentPage} -> ${newPage}`);
+        setCurrentPage(newPage);
       }
     }
   };
@@ -132,6 +192,14 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     if (Math.abs(roundedZoom - lastZoomRef.current) > 0.05) {
       setZoom(roundedZoom);
       lastZoomRef.current = roundedZoom;
+
+      // Debounce zoom key update to prevent excessive re-renders
+      if (zoomTimeoutRef.current) {
+        clearTimeout(zoomTimeoutRef.current);
+      }
+      zoomTimeoutRef.current = setTimeout(() => {
+        setZoomKey((prev) => prev + 1);
+      }, 100); // 100ms debounce
     }
   };
 
@@ -163,10 +231,51 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     }
   };
 
-  const handlePageSelect = (page: number) => {
-    console.log('Page selected:', page);
-    setCurrentPage(page);
-    setTargetPage(page); // Trigger navigation to this page
+  const handlePageSelect = async (page: number) => {
+    const targetPageNum = Math.max(1, Math.min(page, totalPages || 1));
+    if (targetPageNum !== currentPage && totalPages > 0) {
+      console.log(`Thumbnail clicked: navigating to page ${targetPageNum} (current: ${currentPage})`);
+
+      // Clear any existing navigation timeout
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+
+      // Set navigation flag to ignore onPageChange events during navigation
+      isNavigatingRef.current = true;
+      // Set both state and ref
+      targetPageRef.current = targetPageNum;
+      setTargetPage(targetPageNum);
+
+      // Try to use jumpToPage if available (from page-navigation plugin)
+      if (jumpToPageRef.current) {
+        console.log(`Using jumpToPage to navigate to page ${targetPageNum - 1} (0-indexed)`);
+        try {
+          jumpToPageRef.current(targetPageNum - 1); // Plugin uses 0-indexed pages
+          // Update currentPage immediately
+          setCurrentPage(targetPageNum);
+          // Clear flag after a short delay
+          navigationTimeoutRef.current = setTimeout(() => {
+            isNavigatingRef.current = false;
+            targetPageRef.current = null;
+            setTargetPage(null);
+            console.log(`Navigation complete via jumpToPage`);
+          }, 300);
+          return;
+        } catch (error) {
+          console.error('jumpToPage failed, falling back to key-based navigation:', error);
+        }
+      }
+
+      // Fallback: Update pageKey to force re-render with new initialPage
+      setPageKey((prev) => prev + 1);
+
+      // Clear navigation flag after navigation should complete
+      navigationTimeoutRef.current = setTimeout(() => {
+        isNavigatingRef.current = false;
+        console.log(`Navigation flag cleared for page ${targetPageNum}`);
+      }, 1000); // Increased timeout to allow PDF to fully load and navigate
+    }
   };
 
   const handleFullscreen = () => {
@@ -261,6 +370,7 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                           Accept: 'application/pdf',
                         }}
                         withCredentials={true}
+                        plugins={plugins}
                         onDocumentLoad={(e: { doc?: { numPages?: number }; file?: unknown }) => {
                           try {
                             // Clear timeout since PDF loaded successfully
@@ -273,11 +383,29 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                             const doc = e?.doc;
                             if (doc && typeof doc.numPages === 'number') {
                               const numPages = doc.numPages;
-                              console.log(`PDF loaded successfully: ${numPages} pages`);
+                              console.log(
+                                `PDF loaded successfully: ${numPages} pages, targetPage: ${targetPageRef.current}, currentPage: ${currentPage}`
+                              );
                               setTotalPages(numPages);
-                              // Ensure currentPage is valid
-                              if (currentPage < 1 || currentPage > numPages) {
-                                setCurrentPage(1);
+
+                              // Check ref first (most up-to-date), then state
+                              const targetPageToUse = targetPageRef.current ?? targetPage;
+
+                              if (targetPageToUse !== null) {
+                                const validTargetPage = Math.max(1, Math.min(targetPageToUse, numPages));
+                                console.log(`Setting currentPage to ${validTargetPage} (from targetPage)`);
+                                // Set navigation flag to prevent onPageChange from interfering
+                                isNavigatingRef.current = true;
+                                setCurrentPage(validTargetPage);
+                                // Clear flag after navigation should be complete
+                                // Don't set a new timeout here - let handlePageSelect's timeout handle it
+                              } else {
+                                // Only validate/reset currentPage if no targetPage is set
+                                const validPage = Math.max(1, Math.min(currentPage, numPages));
+                                if (validPage !== currentPage && currentPage > 0) {
+                                  console.log(`Validating currentPage: ${currentPage} -> ${validPage}`);
+                                  setCurrentPage(validPage);
+                                }
                               }
                               setLoading(false);
                             } else {
@@ -298,7 +426,7 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                         }}
                         onPageChange={handlePageChange}
                         initialPage={targetPage !== null ? Math.max(0, targetPage - 1) : Math.max(0, currentPage - 1)}
-                        key={targetPage !== null ? `pdf-page-${targetPage}` : 'pdf-viewer'}
+                        key={`pdf-page-${pageKey}-zoom-${zoomKey}`}
                         defaultScale={zoom}
                         renderError={(error) => {
                           console.error('PDF render error:', error);
