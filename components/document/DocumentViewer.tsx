@@ -70,14 +70,20 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
           console.log('📚 Document loaded in plugin:', props.doc.numPages);
 
           // Mark viewer as ready after document loads and pages are rendered
+          // Use multiple timeouts to ensure pages are fully rendered
           setTimeout(() => {
-            setViewerReady(true);
-            console.log('✅ Viewer is now ready for navigation');
-
-            // Log all page elements for debugging
             const allPages = document.querySelectorAll('.rpv-core__page-layer');
-            console.log(`📄 Found ${allPages.length} page elements in DOM`);
-          }, 1000);
+            console.log(`📄 Found ${allPages.length} page elements in DOM (first check)`);
+
+            // Wait a bit more for all pages to render
+            setTimeout(() => {
+              const allPages2 = document.querySelectorAll('.rpv-core__page-layer');
+              console.log(`📄 Found ${allPages2.length} page elements in DOM (second check)`);
+
+              setViewerReady(true);
+              console.log('✅ Viewer is now ready for navigation');
+            }, 1500);
+          }, 500);
         },
         onTextLayerRender: (props: PluginOnTextLayerRender) => {
           // Use callback ref to avoid stale closures
@@ -97,7 +103,37 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
 
   // Get the viewer's scroll container and page elements
   const getViewerScrollContainer = useCallback(() => {
-    return document.querySelector('.rpv-core__viewer') as HTMLElement | null;
+    // Try multiple selectors for the scroll container
+    const selectors = [
+      '.rpv-core__viewer',
+      '.rpv-core__inner-pages',
+      '[data-testid="core__viewer"]',
+      '.pdf-viewer-container > div > div',
+    ];
+
+    for (const selector of selectors) {
+      const element = document.querySelector(selector) as HTMLElement | null;
+      if (element && element.scrollHeight > element.clientHeight) {
+        console.log('✅ Found scroll container with selector:', selector);
+        return element;
+      }
+    }
+
+    // Fallback: find any scrollable container in the viewer
+    const viewerContainer = document.querySelector('.pdf-viewer-container');
+    if (viewerContainer) {
+      const scrollable = Array.from(viewerContainer.querySelectorAll('*')).find((el) => {
+        const htmlEl = el as HTMLElement;
+        return htmlEl.scrollHeight > htmlEl.clientHeight && htmlEl.scrollTop !== undefined;
+      }) as HTMLElement | undefined;
+      if (scrollable) {
+        console.log('✅ Found scrollable container via fallback');
+        return scrollable;
+      }
+    }
+
+    console.warn('❌ Could not find scroll container');
+    return null;
   }, []);
 
   const getPageElement = useCallback((pageIndex: number) => {
@@ -105,58 +141,133 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     const selectors = [
       `.rpv-core__page-layer[data-page-index="${pageIndex}"]`,
       `[data-testid="core__page-layer-${pageIndex}"]`,
+      `.rpv-core__page-layer:nth-of-type(${pageIndex + 1})`,
       `.rpv-core__page-layer:nth-child(${pageIndex + 1})`,
+      `[data-page-index="${pageIndex}"]`,
     ];
 
     for (const selector of selectors) {
       const element = document.querySelector(selector) as HTMLElement | null;
-      if (element) return element;
+      if (element) {
+        console.log(`✅ Found page ${pageIndex} with selector:`, selector);
+        return element;
+      }
     }
+
+    // Fallback: get all page layers and use index
+    const allPages = document.querySelectorAll('.rpv-core__page-layer');
+    if (allPages.length > pageIndex) {
+      console.log(`✅ Found page ${pageIndex} via fallback (total pages: ${allPages.length})`);
+      return allPages[pageIndex] as HTMLElement;
+    }
+
+    console.warn(`❌ Could not find page element for page index ${pageIndex}`);
+    console.log('Available page elements:', document.querySelectorAll('.rpv-core__page-layer').length);
     return null;
   }, []);
 
-  // Add scroll listener to track page changes
+  // Use IntersectionObserver to track which page is visible
   useEffect(() => {
     if (!viewerReady || totalPages === 0) return;
 
+    // Debug: Log DOM structure
+    setTimeout(() => {
+      const scrollContainer = getViewerScrollContainer();
+      const allPages = document.querySelectorAll('.rpv-core__page-layer');
+      console.log('🔍 DOM Debug Info:');
+      console.log('  - Scroll container found:', !!scrollContainer);
+      console.log('  - Total page elements found:', allPages.length);
+      console.log('  - Expected pages:', totalPages);
+
+      if (scrollContainer) {
+        console.log('  - Scroll container class:', scrollContainer.className);
+        console.log('  - Scroll container scrollHeight:', scrollContainer.scrollHeight);
+        console.log('  - Scroll container clientHeight:', scrollContainer.clientHeight);
+      }
+
+      allPages.forEach((page, index) => {
+        const htmlPage = page as HTMLElement;
+        console.log(`  - Page ${index}:`, {
+          className: htmlPage.className,
+          dataAttributes: Array.from(htmlPage.attributes)
+            .filter((attr) => attr.name.startsWith('data-'))
+            .map((attr) => `${attr.name}="${attr.value}"`),
+        });
+      });
+    }, 2000);
+
+    // Use IntersectionObserver for better page tracking
+    const observers: IntersectionObserver[] = [];
+    const pageElements: HTMLElement[] = [];
+
+    for (let i = 0; i < totalPages; i++) {
+      const pageElement = getPageElement(i);
+      if (pageElement) {
+        pageElements.push(pageElement);
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                const newPage = i + 1; // Convert to 1-based
+                if (newPage !== currentPage) {
+                  console.log('📄 Page changed via IntersectionObserver:', newPage);
+                  setCurrentPage(newPage);
+                }
+              }
+            });
+          },
+          {
+            root: getViewerScrollContainer(),
+            threshold: [0, 0.25, 0.5, 0.75, 1],
+          }
+        );
+
+        observer.observe(pageElement);
+        observers.push(observer);
+      }
+    }
+
+    // Fallback: Also add scroll listener
     const scrollContainer = getViewerScrollContainer();
-    if (!scrollContainer) return;
+    if (scrollContainer) {
+      const handleScroll = () => {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const containerCenter = containerRect.top + containerRect.height / 2;
 
-    const handleScroll = () => {
-      // Find which page is currently in view
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const containerCenter = containerRect.top + containerRect.height / 2;
+        let closestPage = 1;
+        let closestDistance = Infinity;
 
-      let closestPage = 1;
-      let closestDistance = Infinity;
+        for (let i = 0; i < totalPages; i++) {
+          const pageElement = getPageElement(i);
+          if (pageElement) {
+            const pageRect = pageElement.getBoundingClientRect();
+            const pageCenter = pageRect.top + pageRect.height / 2;
+            const distance = Math.abs(pageCenter - containerCenter);
 
-      for (let i = 0; i < totalPages; i++) {
-        const pageElement = getPageElement(i);
-        if (pageElement) {
-          const pageRect = pageElement.getBoundingClientRect();
-          const pageCenter = pageRect.top + pageRect.height / 2;
-          const distance = Math.abs(pageCenter - containerCenter);
-
-          if (distance < closestDistance) {
-            closestDistance = distance;
-            closestPage = i + 1; // Convert to 1-based
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestPage = i + 1;
+            }
           }
         }
-      }
 
-      if (closestPage !== currentPage) {
-        console.log('📄 Page changed via scroll:', closestPage);
-        setCurrentPage(closestPage);
-      }
-    };
+        if (closestPage !== currentPage) {
+          console.log('📄 Page changed via scroll:', closestPage);
+          setCurrentPage(closestPage);
+        }
+      };
 
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
 
-    // Also check on initial load
-    setTimeout(handleScroll, 1000);
+      return () => {
+        observers.forEach((observer) => observer.disconnect());
+        scrollContainer.removeEventListener('scroll', handleScroll);
+      };
+    }
 
     return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll);
+      observers.forEach((observer) => observer.disconnect());
     };
   }, [viewerReady, totalPages, currentPage, getViewerScrollContainer, getPageElement]);
 
@@ -301,76 +412,66 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
     setRotation(newRotation);
   }, [rotation]);
 
-  const handlePreviousPage = useCallback(() => {
-    if (currentPage > 1) {
-      console.log('⬅️ Jumping to previous page:', currentPage - 1);
-      const targetPage = currentPage - 2; // 0-based index
-      const pageElement = getPageElement(targetPage);
+  // Helper function to scroll to a page with retry logic
+  const scrollToPage = useCallback(
+    (pageIndex: number, retries = 3) => {
+      const pageElement = getPageElement(pageIndex);
       const scrollContainer = getViewerScrollContainer();
 
       if (pageElement && scrollContainer) {
         const containerRect = scrollContainer.getBoundingClientRect();
         const elementRect = pageElement.getBoundingClientRect();
-        const scrollTop = scrollContainer.scrollTop + (elementRect.top - containerRect.top);
+        const scrollTop = scrollContainer.scrollTop + (elementRect.top - containerRect.top) - 20; // Add small offset
 
         scrollContainer.scrollTo({
-          top: scrollTop,
+          top: Math.max(0, scrollTop),
           behavior: 'smooth',
         });
-        setCurrentPage(currentPage - 1);
+        return true;
+      } else if (retries > 0) {
+        // Retry after a short delay
+        console.log(`⏳ Retrying page navigation (${retries} retries left)...`);
+        setTimeout(() => scrollToPage(pageIndex, retries - 1), 200);
+        return false;
       } else {
-        console.warn('⬅️ Could not find page element or scroll container');
+        console.warn(`❌ Could not find page element or scroll container for page index ${pageIndex}`);
+        return false;
+      }
+    },
+    [getPageElement, getViewerScrollContainer]
+  );
+
+  const handlePreviousPage = useCallback(() => {
+    if (currentPage > 1) {
+      console.log('⬅️ Jumping to previous page:', currentPage - 1);
+      const targetPage = currentPage - 2; // 0-based index
+      if (scrollToPage(targetPage)) {
+        setCurrentPage(currentPage - 1);
       }
     }
-  }, [currentPage, getPageElement, getViewerScrollContainer]);
+  }, [currentPage, scrollToPage]);
 
   const handleNextPage = useCallback(() => {
     if (currentPage < totalPages) {
       console.log('➡️ Jumping to next page:', currentPage + 1);
       const targetPage = currentPage; // 0-based index
-      const pageElement = getPageElement(targetPage);
-      const scrollContainer = getViewerScrollContainer();
-
-      if (pageElement && scrollContainer) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const elementRect = pageElement.getBoundingClientRect();
-        const scrollTop = scrollContainer.scrollTop + (elementRect.top - containerRect.top);
-
-        scrollContainer.scrollTo({
-          top: scrollTop,
-          behavior: 'smooth',
-        });
+      if (scrollToPage(targetPage)) {
         setCurrentPage(currentPage + 1);
-      } else {
-        console.warn('➡️ Could not find page element or scroll container');
       }
     }
-  }, [currentPage, totalPages, getPageElement, getViewerScrollContainer]);
+  }, [currentPage, totalPages, scrollToPage]);
 
   const handlePageSelect = useCallback(
     (page: number) => {
       if (page >= 1 && page <= totalPages) {
         console.log('🎯 Jumping to page:', page);
         const targetPage = page - 1; // 0-based index
-        const pageElement = getPageElement(targetPage);
-        const scrollContainer = getViewerScrollContainer();
-
-        if (pageElement && scrollContainer) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const elementRect = pageElement.getBoundingClientRect();
-          const scrollTop = scrollContainer.scrollTop + (elementRect.top - containerRect.top);
-
-          scrollContainer.scrollTo({
-            top: scrollTop,
-            behavior: 'smooth',
-          });
+        if (scrollToPage(targetPage)) {
           setCurrentPage(page);
-        } else {
-          console.warn('🎯 Could not find page element or scroll container for page:', page);
         }
       }
     },
-    [totalPages, getPageElement, getViewerScrollContainer]
+    [totalPages, scrollToPage]
   );
 
   const handleFullscreen = useCallback(() => {
