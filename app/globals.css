@@ -59,10 +59,10 @@
     --tracking-normal: 0em;
     --spacing: 0.25rem;
 
-    /* Custom gradient colors for branding */
-    --gradient-from: oklch(0.6723 0.1606 244.9955); /* indigo */
-    --gradient-via: oklch(0.6907 0.1554 160.3454); /* purple */
-    --gradient-to: oklch(0.7064 0.1822 151.7125); /* pink */
+    /* Custom gradient colors for branding - NotebookLM style (green to blue) */
+    --gradient-from: oklch(0.65 0.15 150); /* green */
+    --gradient-via: oklch(0.65 0.15 180); /* teal */
+    --gradient-to: oklch(0.65 0.15 240); /* blue */
   }
 
   .dark {
@@ -247,13 +247,21 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+/* NotebookLM-style minimal gradient */
+.gradient-text-minimal {
+  background: linear-gradient(to right, oklch(0.65 0.15 150), oklch(0.65 0.15 240));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .card-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease-out;
 }
 
 .card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.1), 0 10px 10px -5px rgba(99, 102, 241, 0.04);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* Hide scrollbars for PDF viewer */
@@ -299,7 +307,6 @@ body {
 
 /* Performance optimizations for PDF viewer */
 .pdf-viewer-container {
-  contain: layout style paint;
   will-change: scroll-position;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);

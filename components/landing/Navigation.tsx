@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
 import { Logo } from '@/components/Logo';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
@@ -13,61 +12,50 @@ export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <motion.nav
-      initial={{ y: -100, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="fixed top-0 left-0 right-0 z-50 border-b bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80"
-    >
+    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link
             href="/"
-            className="flex items-center space-x-2 group"
+            className="flex items-center space-x-2"
           >
             <Logo />
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent group-hover:from-primary/80 transition-all">
-              DocAI
-            </span>
+            <span className="text-xl font-semibold text-foreground">DocAI</span>
           </Link>
 
           <div className="hidden md:flex items-center space-x-8">
             <Link
               href="#features"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
             >
               Features
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full" />
             </Link>
             <Link
               href="#pricing"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
             >
               Pricing
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full" />
             </Link>
             <Link
               href="#demo"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
+              className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
             >
               Demo
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary transition-all group-hover:w-full" />
             </Link>
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center space-x-3">
+            <div className="hidden md:flex items-center space-x-4">
               <ThemeToggle />
-              <Button
-                variant="ghost"
-                asChild
-                className="hover:bg-accent"
+              <Link
+                href="/sign-in"
+                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
               >
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
+                Sign In
+              </Link>
               <Button
                 asChild
-                className="shadow-sm hover:shadow-md transition-shadow"
+                className="bg-foreground text-background hover:bg-foreground/90 rounded-md px-4 py-2 text-sm font-medium transition-colors"
               >
                 <Link href="/sign-up">Get Started</Link>
               </Button>
@@ -114,24 +102,19 @@ export function Navigation() {
                   >
                     Demo
                   </Link>
-                  <div className="pt-4 border-t space-y-2">
+                  <div className="pt-4 border-t space-y-3">
                     <div className="flex justify-center pb-2">
                       <ThemeToggle />
                     </div>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      asChild
+                    <Link
+                      href="/sign-in"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block text-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
                     >
-                      <Link
-                        href="/sign-in"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Sign In
-                      </Link>
-                    </Button>
+                      Sign In
+                    </Link>
                     <Button
-                      className="w-full"
+                      className="w-full bg-foreground text-background hover:bg-foreground/90 rounded-md"
                       asChild
                     >
                       <Link
@@ -148,6 +131,6 @@ export function Navigation() {
           </div>
         </div>
       </div>
-    </motion.nav>
+    </nav>
   );
 }
