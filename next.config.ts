@@ -5,10 +5,17 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   // Set the workspace root to silence the multiple lockfiles warning
   outputFileTracingRoot: process.cwd(),
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     // Exclude Node.js-only modules from client-side bundle
     // This prevents pdfjs-dist from trying to require 'canvas' in the browser
     if (!isServer) {
+      // Use IgnorePlugin to completely ignore canvas requires
+      config.plugins.push(
+        new webpack.IgnorePlugin({
+          resourceRegExp: /^canvas$/,
+        })
+      );
+
       // Use alias to prevent canvas from being bundled
       config.resolve.alias = {
         ...config.resolve.alias,
