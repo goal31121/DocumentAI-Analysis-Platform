@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -9,23 +10,23 @@ const nextConfig: NextConfig = {
     // Exclude Node.js-only modules from client-side bundle
     // This prevents pdfjs-dist from trying to require 'canvas' in the browser
     if (!isServer) {
-      // Use IgnorePlugin to completely ignore canvas requires
-      config.plugins.push(
-        new webpack.IgnorePlugin({
-          resourceRegExp: /^canvas$/,
-        })
-      );
+      // Create a stub module path
+      const canvasStubPath = path.resolve(process.cwd(), 'lib/canvas-stub.js');
 
-      // Use alias to prevent canvas from being bundled
+      // Use NormalModuleReplacementPlugin to replace canvas with our stub
+      // This replaces ALL require('canvas') calls with our stub module
+      config.plugins.push(new webpack.NormalModuleReplacementPlugin(/^canvas$/, canvasStubPath));
+
+      // Use alias to redirect canvas to stub (as backup)
       config.resolve.alias = {
         ...config.resolve.alias,
-        canvas: false,
+        canvas: canvasStubPath,
       };
 
-      // Also set fallback for additional Node.js modules
+      // Set fallback for Node.js modules
       config.resolve.fallback = {
         ...config.resolve.fallback,
-        canvas: false,
+        canvas: canvasStubPath,
         fs: false,
         path: false,
         crypto: false,
