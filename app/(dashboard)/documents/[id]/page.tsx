@@ -25,6 +25,7 @@ export default function DocumentViewerPage() {
 
   const [document, setDocument] = useState<DocumentData | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,15 +53,17 @@ export default function DocumentViewerPage() {
         if (data.success) {
           setDocument(data.document);
 
-          // Only allow PDF viewing for now
-          if (data.document.fileType !== 'pdf') {
-            setError('Only PDF files can be viewed in the document viewer. Other file types will be supported soon.');
-            return;
+          // Set pdfUrl for PDF files (for viewing)
+          if (data.document.fileType === 'pdf') {
+            // Use proxy endpoint to avoid CORS issues - convert to absolute URL
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+            setPdfUrl(`${baseUrl}/api/documents/${documentId}/view`);
           }
 
-          // Use proxy endpoint to avoid CORS issues - convert to absolute URL
-          const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-          setPdfUrl(`${baseUrl}/api/documents/${documentId}/view`);
+          // Set download URL for all file types
+          if (data.url) {
+            setDownloadUrl(data.url);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load document');
@@ -72,23 +75,25 @@ export default function DocumentViewerPage() {
     fetchDocument();
   }, [documentId, router]);
 
-  console.log('pdfUrl', pdfUrl);
-  console.log('document', document);
-
   const handleDownload = async () => {
-    if (!pdfUrl) return;
+    if (!document) return;
 
     try {
-      const response = await fetch(pdfUrl);
+      // Use presigned URL if available, otherwise use download endpoint
+      const url = downloadUrl || `/api/documents/${documentId}/download`;
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Download failed');
+
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = window.document.createElement('a');
-      link.href = url;
-      link.download = document?.fileName || 'document.pdf';
+      link.href = blobUrl;
+      link.download = document.fileName;
       window.document.body.appendChild(link);
       link.click();
       window.document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Download failed:', err);
     }
@@ -126,7 +131,7 @@ export default function DocumentViewerPage() {
     );
   }
 
-  if (!document || !pdfUrl) {
+  if (!document) {
     return (
       <div className="p-6">
         <Card className="p-8">
@@ -138,7 +143,9 @@ export default function DocumentViewerPage() {
     );
   }
 
-  if (document.fileType !== 'pdf') {
+  // Validate file type is supported
+  const supportedTypes = ['pdf', 'docx', 'xlsx'];
+  if (!supportedTypes.includes(document.fileType.toLowerCase())) {
     return (
       <div className="p-6">
         <Button
@@ -153,8 +160,7 @@ export default function DocumentViewerPage() {
           <div className="text-center">
             <p className="font-medium mb-2">Viewer not available</p>
             <p className="text-sm text-muted-foreground">
-              Only PDF files can be viewed in the document viewer. Support for {document.fileType.toUpperCase()} files
-              will be added soon.
+              File type {document.fileType.toUpperCase()} is not supported. Supported types: PDF, DOCX, XLSX
             </p>
           </div>
         </Card>
@@ -187,8 +193,10 @@ export default function DocumentViewerPage() {
       {/* Document Viewer */}
       <div className="flex-1 overflow-hidden">
         <DocumentViewer
-          pdfUrl={pdfUrl}
+          documentId={documentId}
+          fileType={document.fileType.toLowerCase() as 'pdf' | 'docx' | 'xlsx'}
           fileName={document.fileName}
+          pdfUrl={pdfUrl || undefined}
           onDownload={handleDownload}
         />
       </div>
