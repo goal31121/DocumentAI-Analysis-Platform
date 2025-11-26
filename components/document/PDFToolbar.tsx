@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -44,25 +44,61 @@ export function PDFToolbar({
   showThumbnails,
   className,
 }: PDFToolbarProps) {
-  const [pageInput, setPageInput] = useState('');
+  const [pageInput, setPageInput] = useState('1');
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleZoomSliderChange = (values: number[]) => {
     onZoomChange(values[0]);
   };
 
-  const handlePageInputSubmit = () => {
-    const page = parseInt(pageInput, 10);
-    if (page >= 1 && page <= totalPages && onPageJump) {
-      onPageJump(page);
-      setPageInput('');
+  // Handle page input with debouncing and auto-correction
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    // Only allow numbers (empty string is allowed for clearing)
+    if (value === '' || /^\d+$/.test(value)) {
+      setPageInput(value);
+
+      // Clear existing timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+
+      // If input is not empty, set up debounced jump
+      if (value !== '' && onPageJump) {
+        debounceTimeoutRef.current = setTimeout(() => {
+          const pageNum = parseInt(value, 10);
+          if (!isNaN(pageNum) && pageNum >= 1) {
+            // Auto-correct out-of-bounds values
+            const correctedPage = Math.min(pageNum, totalPages);
+            const finalPage = Math.max(1, correctedPage);
+
+            // If value was corrected, update the input display
+            if (finalPage !== pageNum) {
+              setPageInput(finalPage.toString());
+            }
+
+            // Jump to the page
+            onPageJump(finalPage);
+
+            // Clear input after a short delay to show the jump happened
+            setTimeout(() => {
+              // setPageInput('');
+            }, 300);
+          }
+        }, 800); // 800ms debounce - wait for user to finish typing
+      }
     }
   };
 
-  const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handlePageInputSubmit();
-    }
-  };
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className={cn('flex items-center gap-2 p-2 bg-background border-b border-border', className)}>
@@ -94,15 +130,14 @@ export function PDFToolbar({
         {onPageJump && (
           <div className="flex items-center gap-1 ml-1">
             <Input
-              type="number"
-              min={1}
-              max={totalPages}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
-              onKeyDown={handlePageInputKeyDown}
+              onChange={handlePageInputChange}
               placeholder="Page"
               className="h-8 w-16 text-center text-xs px-2"
-              title="Type page number and press Enter"
+              title={`Type page number (1-${totalPages})`}
             />
           </div>
         )}

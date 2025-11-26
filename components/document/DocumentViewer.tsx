@@ -45,17 +45,20 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
   const rotationRef = useRef<HTMLDivElement>(null);
 
   // Use refs to track the latest state without causing re-renders in the plugin
+  const currentPageRef = useRef(currentPage);
   const currentPageCallbackRef = useRef((page: number) => {
     console.log('📄 Page changed via scroll:', page);
     setCurrentPage(page);
   });
 
-  // Update callbacks when state changes
+  // Update refs when state changes
   useEffect(() => {
+    currentPageRef.current = currentPage;
     currentPageCallbackRef.current = (page: number) => {
-      if (page !== currentPage && page > 0) {
+      if (page !== currentPageRef.current && page > 0) {
         console.log('📄 Page changed via scroll:', page);
         setCurrentPage(page);
+        currentPageRef.current = page;
       }
     };
   }, [currentPage]);
@@ -232,7 +235,9 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
             }
           }
 
-          if (closestPage !== currentPage && closestPage > 0) {
+          // Use ref to get latest currentPage value to avoid stale closure
+          const latestCurrentPage = currentPageRef.current;
+          if (closestPage !== latestCurrentPage && closestPage > 0) {
             console.log(
               '📄 Page changed via scroll:',
               closestPage,
@@ -240,6 +245,7 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
               maxVisibleRatio.toFixed(2) + ')'
             );
             setCurrentPage(closestPage);
+            currentPageRef.current = closestPage;
           }
         }, 150); // Debounce by 150ms
       };
@@ -258,7 +264,9 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
 
                 // Update if page is significantly visible (at least 30% or more than half viewport height)
                 if (ratio > 0.3 || visibleHeight > viewportHeight * 0.5) {
-                  if (newPage !== currentPage) {
+                  // Use ref to get latest currentPage value to avoid stale closure
+                  const latestCurrentPage = currentPageRef.current;
+                  if (newPage !== latestCurrentPage) {
                     console.log(
                       '📄 Page changed via IntersectionObserver:',
                       newPage,
@@ -268,6 +276,7 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
                       visibleHeight.toFixed(0) + 'px)'
                     );
                     setCurrentPage(newPage);
+                    currentPageRef.current = newPage;
                   }
                 }
               }
@@ -379,7 +388,7 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
         window.removeEventListener('scroll', handleScroll);
       }
     };
-  }, [viewerReady, totalPages, currentPage, getViewerScrollContainer, getPageElement]);
+  }, [viewerReady, totalPages, getViewerScrollContainer, getPageElement]);
 
   // Configure PDF.js worker
   useEffect(() => {
