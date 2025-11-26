@@ -1,6 +1,6 @@
 # DocAI :- Intelligent Document Analysis Platform
 
-[![DocAI Platform](./public/docai-thumbnail.png)](https://docai-analysis-platform.vercel.app/)
+[![DocAI Platform](./public/docai-thumbnail.webp)](https://docai-analysis-platform.vercel.app/)
 
 **Live Demo:** [https://docai-analysis-platform.vercel.app/](https://docai-analysis-platform.vercel.app/)
 
@@ -23,6 +23,8 @@
 - **Storage:** AWS S3, Pinecone Vector Database
 - **Auth:** Better Auth
 - **Document Processing:** PDF.js, Mammoth (DOCX), SheetJS (Excel)
+
+[![DocAI Platform](./public/docai-app-ui.webp)](https://docai-analysis-platform.vercel.app/)
 
 ## 📦 Installation
 
