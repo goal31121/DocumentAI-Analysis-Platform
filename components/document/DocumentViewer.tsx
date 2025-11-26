@@ -652,18 +652,23 @@ export function DocumentViewer({ pdfUrl, fileName, onDownload, className }: Docu
 
           // Try to restore last page from localStorage
           const savedPage = localStorage.getItem(`pdf-page-${fileName}`);
+          console.log('📚 Saved page:', savedPage);
           if (savedPage) {
             const page = parseInt(savedPage, 10);
             if (page >= 1 && page <= numPages) {
               console.log('📚 Restoring saved page:', page);
               setTimeout(() => {
-                jumpToPage(page);
+                // jumpToPage(page);
+                scrollToPage(page - 1);
+                setCurrentPage(page);
               }, 500); // Wait a bit for viewer to be ready
             } else {
               setCurrentPage(1);
+              jumpToPage(1);
             }
           } else {
             setCurrentPage(1); // Reset to first page
+            jumpToPage(1);
           }
           console.log('📚 PDF loaded successfully, total pages:', numPages);
         }

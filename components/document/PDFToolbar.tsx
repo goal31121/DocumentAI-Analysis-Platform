@@ -57,7 +57,7 @@ export function PDFToolbar({
     const value = e.target.value;
 
     // Only allow numbers (empty string is allowed for clearing)
-    if (value === '' || /^\d+$/.test(value)) {
+    if (value === '' || /^\d+$/.test(value) || (parseInt(value, 10) >= 1 && parseInt(value, 10) <= totalPages)) {
       // setPageInput(value);
       setCurrentPage(parseInt(value, 10));
 
@@ -133,9 +133,11 @@ export function PDFToolbar({
         {onPageJump && (
           <div className="flex items-center gap-1 ml-1">
             <Input
-              type="text"
+              type="number"
               inputMode="numeric"
               pattern="[0-9]*"
+              min={1}
+              max={totalPages}
               value={currentPage}
               onChange={handlePageInputChange}
               placeholder="Page"
