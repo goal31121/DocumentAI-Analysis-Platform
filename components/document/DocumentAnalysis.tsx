@@ -61,16 +61,16 @@ export function DocumentAnalysis({ documentId, fileName, className }: DocumentAn
           />
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden min-h-0">
           <TabsContent
             value="chat"
-            className="h-full m-0"
+            className="h-full m-0 flex flex-col min-h-0"
           >
             <QAInterface
               documentId={documentId}
               conversationId={conversationId}
               onConversationIdChange={setConversationId}
-              className="h-fit"
+              className="h-full"
             />
           </TabsContent>
 

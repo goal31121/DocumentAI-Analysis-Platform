@@ -325,6 +325,18 @@ body {
   padding-bottom: 2rem !important;
 }
 
+/* Override Radix ScrollArea fit-content for QAInterface */
+/* Ensure ScrollArea respects flex container height constraints */
+.qa-scroll-area-root {
+  height: 100%;
+  min-height: 0;
+}
+
+.qa-scroll-area-root [data-radix-scroll-area-viewport] {
+  height: 100%;
+  min-height: 0;
+}
+
 /* Optimize PDF page rendering */
 .rpv-core__page-layer {
   will-change: transform;

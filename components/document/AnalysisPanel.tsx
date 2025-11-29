@@ -69,11 +69,11 @@ export function AnalysisPanel({ documentId, fileName, className, onToggle, isOpe
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         <DocumentAnalysis
           documentId={documentId}
           fileName={fileName || 'Document'}
-          className="h-full"
+          className="flex-1 min-h-0"
         />
       </div>
     </div>
