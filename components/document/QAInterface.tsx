@@ -65,10 +65,19 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
         const data = await response.json();
         if (data.success && data.messages) {
           setMessages(
-            data.messages.map((msg: any) => ({
-              ...msg,
-              createdAt: new Date(msg.createdAt),
-            }))
+            data.messages.map(
+              (msg: {
+                id: string;
+                role: 'user' | 'assistant';
+                content: string;
+                sources?: unknown;
+                model?: string;
+                createdAt: string | Date;
+              }) => ({
+                ...msg,
+                createdAt: new Date(msg.createdAt),
+              })
+            )
           );
         }
       }
@@ -155,11 +164,11 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
   };
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn('flex flex-col h-full min-h-0', className)}>
       {/* Messages Area */}
       <ScrollArea
         ref={scrollAreaRef}
-        className="flex-1 p-4"
+        className="flex-1 min-h-0 p-4"
       >
         <div className="space-y-4">
           {messages.length === 0 && (
@@ -179,7 +188,7 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
               className={cn('flex gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}
             >
               {message.role === 'assistant' && (
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                     <Bot className="h-4 w-4 text-primary" />
                   </div>
@@ -226,7 +235,7 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
               </div>
 
               {message.role === 'user' && (
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                     <User className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -237,7 +246,7 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
 
           {loading && (
             <div className="flex gap-3 justify-start">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <Bot className="h-4 w-4 text-primary" />
                 </div>

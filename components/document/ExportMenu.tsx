@@ -26,21 +26,48 @@ export function ExportMenu({ documentId, fileName, onExport, className }: Export
 
     try {
       const response = await fetch(`/api/documents/${documentId}/export?format=${format}`);
-      if (!response.ok) throw new Error('Export failed');
 
-      const blob = await response.blob();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(errorData.error || `Export failed: ${response.status} ${response.statusText}`);
+      }
+
+      // Handle different content types
+      const contentType = response.headers.get('content-type') || '';
+
+      let blob: Blob;
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      } else {
+        blob = await response.blob();
+      }
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
 
-      const extension = format === 'json' ? 'json' : format === 'csv' ? 'csv' : 'pdf';
-      link.download = `${fileName.replace(/\.[^/.]+$/, '')}_analysis.${extension}`;
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `${fileName.replace(/\.[^/.]+$/, '')}_analysis.${
+        format === 'json' ? 'json' : format === 'csv' ? 'csv' : 'pdf'
+      }`;
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to export document. Please try again.');
     }
   };
 
