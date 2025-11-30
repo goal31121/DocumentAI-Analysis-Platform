@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Loader2, Send, Bot, User, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { useQueryClient } from '@tanstack/react-query';
 
 export interface Message {
   id: string;
@@ -49,13 +50,22 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(conversationId);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const queryClient = useQueryClient();
 
-  // Load conversation history if conversationId is provided
+  // Load conversation history if conversationId is provided, or clear messages for new conversation
   useEffect(() => {
     if (currentConversationId) {
       loadConversationHistory(currentConversationId);
+    } else {
+      // Clear messages when starting a new conversation
+      setMessages([]);
     }
   }, [currentConversationId]);
+
+  // Sync with prop changes
+  useEffect(() => {
+    setCurrentConversationId(conversationId);
+  }, [conversationId]);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -157,6 +167,9 @@ export function QAInterface({ documentId, conversationId, onConversationIdChange
         if (data.conversationId && data.conversationId !== currentConversationId) {
           setCurrentConversationId(data.conversationId);
           onConversationIdChange?.(data.conversationId);
+
+          // Invalidate conversations list to show the new conversation
+          queryClient.invalidateQueries({ queryKey: ['conversations', documentId] });
         }
       } else {
         throw new Error(data.error || 'Failed to get response');
