@@ -27,39 +27,46 @@ export function Sidebar() {
       )}
     >
       {/* Header with Logo and Toggle */}
-      <div className="p-4 border-b shrink-0 flex items-center justify-between gap-2">
-        {!isCollapsed && (
-          <Link
-            href="/documents"
-            className="flex items-center space-x-2 group flex-1"
-          >
-            <Logo />
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent group-hover:from-primary/80 transition-all">
-              DocAI
-            </span>
-          </Link>
+      <div
+        className={cn(
+          'border-b shrink-0 flex items-center transition-all duration-300',
+          isCollapsed ? 'p-4 justify-center' : 'p-4 justify-between gap-2'
         )}
-
-        {isCollapsed && (
-          <Link
-            href="/documents"
-            className="items-center justify-center group hidden"
-            title="DocAI"
+      >
+        {isCollapsed ? (
+          // Collapsed: PanelLeft icon replaces logo (same size as logo)
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleCollapse}
+            className="p-2 h-auto w-auto cursor-pointer hover:bg-accent transition-colors"
+            title="Expand sidebar"
           >
-            <Logo />
-          </Link>
+            <PanelLeft className="h-8 w-8 text-foreground" />
+          </Button>
+        ) : (
+          // Expanded: Logo + text + PanelLeft toggle button
+          <>
+            <Link
+              href="/documents"
+              className="flex items-center space-x-2 group flex-1 min-w-0"
+            >
+              <Logo className="h-8 w-8 shrink-0" />
+              <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent group-hover:from-primary/80 transition-all whitespace-nowrap">
+                DocAI
+              </span>
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleCollapse}
+              className="p-2 h-auto w-auto shrink-0 cursor-pointer hover:bg-accent transition-colors"
+              title="Collapse sidebar"
+            >
+              <PanelLeft className="h-5 w-5 text-muted-foreground" />
+            </Button>
+          </>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleCollapse}
-          className="p-1.5 shrink-0 cursor-pointer"
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {/* <PanelLeft className="h-8 w-8" /> */}
-          {/* <PanelLeft className={cn('h-5 w-5 transition-transform scale-110')} /> */}
-          <PanelLeft className="h-4 w-4" />
-        </Button>
       </div>
 
       {/* Navigation */}
