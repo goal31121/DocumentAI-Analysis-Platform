@@ -5,6 +5,8 @@ import { createConversation, addMessage, getConversationHistory } from '@/lib/ai
 import { db } from '@/lib/db';
 import { documents, conversations } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { rateLimitMiddleware } from '@/lib/rate-limit/middleware';
+import { getCachedQuery, cacheQuery } from '@/lib/cache/redis-cache';
 
 /**
  * POST /api/ai/query
@@ -39,6 +41,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check rate limit (default to 'free' tier - in production, get from user's subscription)
+    const { response: rateLimitResponse } = await rateLimitMiddleware(session.user.id, 'free', 'query');
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    // Check cache first
+    const cacheKey = documentIds && documentIds.length > 0 ? documentIds : [];
+    const cachedResult = await getCachedQuery(query, cacheKey);
+    if (cachedResult) {
+      return NextResponse.json({
+        success: true,
+        ...(cachedResult as { answer: string; sources: unknown[]; model?: string }),
+        cached: true,
+      });
+    }
+
     // Get or create conversation
     let currentConversationId = conversationId;
     if (!currentConversationId) {
@@ -64,6 +83,13 @@ export async function POST(request: NextRequest) {
         temperature: 0.7,
         maxTokens: 2000,
       },
+    });
+
+    // Cache the result
+    await cacheQuery(query, cacheKey, {
+      answer: ragResult.answer,
+      sources: ragResult.sources,
+      model: ragResult.model,
     });
 
     // Add assistant response to conversation

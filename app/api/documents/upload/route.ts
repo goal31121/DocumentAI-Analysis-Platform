@@ -4,6 +4,8 @@ import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import { uploadFileToS3, generateS3Key } from '@/lib/storage/s3';
 import { processDocumentQueue } from '@/lib/queue/processor';
+import { rateLimitMiddleware } from '@/lib/rate-limit/middleware';
+import { checkUploadQuotas } from '@/lib/quota/quota-manager';
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +32,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid file type. Only PDF, DOCX, and XLSX are supported' }, { status: 400 });
     }
 
-    // Validate file size (50MB)
+    // Check rate limit
+    const { response: rateLimitResponse } = await rateLimitMiddleware(session.user.id, 'free', 'upload');
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    // Check quotas (default to 'free' tier - in production, get from user's subscription)
+    const quotaCheck = await checkUploadQuotas(session.user.id, 'free', file.size);
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Quota exceeded',
+          message: quotaCheck.reasons.join('; '),
+          quotas: {
+            document: quotaCheck.documentQuota,
+            storage: quotaCheck.storageQuota,
+            fileSize: quotaCheck.fileSizeQuota,
+            concurrent: quotaCheck.concurrentQuota,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
+    // Validate file size (50MB - this is a hard limit, tier limits are checked above)
     const MAX_SIZE = 50 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       return NextResponse.json({ error: 'File size exceeds 50MB limit' }, { status: 400 });

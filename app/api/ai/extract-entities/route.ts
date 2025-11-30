@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import { queryDocuments } from '@/lib/ai/rag-pipeline';
 import { eq, and } from 'drizzle-orm';
+import { getCachedDocumentAnalysis, cacheDocumentAnalysis } from '@/lib/cache/redis-cache';
 
 /**
  * GET /api/ai/extract-entities?documentId=xxx
@@ -36,6 +37,16 @@ export async function GET(request: NextRequest) {
 
     if (document.status !== 'completed') {
       return NextResponse.json({ error: 'Document is still processing' }, { status: 202 });
+    }
+
+    // Check cache first
+    const cached = await getCachedDocumentAnalysis(documentId, 'entities');
+    if (cached) {
+      return NextResponse.json({
+        success: true,
+        ...(cached as { entities: unknown[]; model?: string }),
+        cached: true,
+      });
     }
 
     // Extract entities using RAG pipeline
@@ -108,11 +119,19 @@ Focus on the most important and frequently mentioned entities. Return only the J
       }))
       .slice(0, 50); // Limit to 50 entities
 
-    return NextResponse.json({
+    const result = {
       success: true,
       entities: formattedEntities,
       model: ragResult.model,
+    };
+
+    // Cache the result
+    await cacheDocumentAnalysis(documentId, 'entities', {
+      entities: formattedEntities,
+      model: ragResult.model,
     });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Extract entities error:', error);
     return NextResponse.json(

@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import { queryDocuments } from '@/lib/ai/rag-pipeline';
 import { eq, and } from 'drizzle-orm';
+import { getCachedDocumentAnalysis, cacheDocumentAnalysis } from '@/lib/cache/redis-cache';
 
 /**
  * GET /api/ai/summarize?documentId=xxx
@@ -38,6 +39,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Document is still processing' }, { status: 202 });
     }
 
+    // Check cache first
+    const cached = await getCachedDocumentAnalysis(documentId, 'summary');
+    if (cached) {
+      return NextResponse.json({
+        success: true,
+        ...(cached as { summary: string; model?: string }),
+        cached: true,
+      });
+    }
+
     // Generate summary using RAG pipeline
     const summaryPrompt = `Please provide a comprehensive summary of this document. Include:
 1. Main topic and purpose
@@ -59,11 +70,19 @@ Keep the summary concise but informative (2-3 paragraphs).`;
       },
     });
 
-    return NextResponse.json({
+    const result = {
       success: true,
       summary: ragResult.answer,
       model: ragResult.model,
+    };
+
+    // Cache the result
+    await cacheDocumentAnalysis(documentId, 'summary', {
+      summary: ragResult.answer,
+      model: ragResult.model,
     });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Summarize error:', error);
     return NextResponse.json(

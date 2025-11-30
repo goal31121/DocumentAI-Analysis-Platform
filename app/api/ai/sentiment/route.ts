@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import { queryDocuments } from '@/lib/ai/rag-pipeline';
 import { eq, and } from 'drizzle-orm';
+import { getCachedDocumentAnalysis, cacheDocumentAnalysis } from '@/lib/cache/redis-cache';
 
 /**
  * GET /api/ai/sentiment?documentId=xxx
@@ -36,6 +37,16 @@ export async function GET(request: NextRequest) {
 
     if (document.status !== 'completed') {
       return NextResponse.json({ error: 'Document is still processing' }, { status: 202 });
+    }
+
+    // Check cache first
+    const cached = await getCachedDocumentAnalysis(documentId, 'sentiment');
+    if (cached) {
+      return NextResponse.json({
+        success: true,
+        ...(cached as { sentiment: unknown; model?: string }),
+        cached: true,
+      });
     }
 
     // Analyze sentiment using RAG pipeline
@@ -100,7 +111,7 @@ Return only the JSON object, no additional text.`;
     sentiment.score = Math.max(0, Math.min(1, sentiment.score));
     sentiment.confidence = Math.max(0, Math.min(1, sentiment.confidence));
 
-    return NextResponse.json({
+    const result = {
       success: true,
       sentiment: {
         sentiment: sentiment.sentiment,
@@ -108,7 +119,19 @@ Return only the JSON object, no additional text.`;
         confidence: sentiment.confidence,
       },
       model: ragResult.model,
+    };
+
+    // Cache the result
+    await cacheDocumentAnalysis(documentId, 'sentiment', {
+      sentiment: {
+        sentiment: sentiment.sentiment,
+        score: sentiment.score,
+        confidence: sentiment.confidence,
+      },
+      model: ragResult.model,
     });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Sentiment analysis error:', error);
     return NextResponse.json(
