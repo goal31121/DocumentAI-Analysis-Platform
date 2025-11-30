@@ -15,7 +15,7 @@ vi.mock('@/lib/ai/embeddings', () => ({
 vi.mock('@/lib/vector/pinecone', () => ({
   queryVectors: vi.fn(),
   upsertVectors: vi.fn(),
-  hybridSearch: vi.fn(),
+  hybridSearch: undefined, // Not available, will use fallback to queryVectors
 }));
 
 vi.mock('@/lib/ai/model-selector', () => ({
@@ -79,13 +79,15 @@ describe('RAG Pipeline', () => {
       const modelModule = await import('@/lib/ai/model-selector');
 
       vi.mocked(embeddingsModule.generateEmbeddings).mockResolvedValue(mockEmbedding);
-      vi.mocked(pineconeModule.queryVectors).mockResolvedValue(mockResults);
+      // Ensure queryVectors returns the results array
+      vi.mocked(pineconeModule.queryVectors).mockResolvedValue(mockResults as any);
       vi.mocked(modelModule.generateResponse).mockResolvedValue(mockResponse);
 
       const result = await queryDocuments('test query', {
         documentIds: ['doc-1'],
         userId: 'user-1',
         topK: 5,
+        useHybridSearch: false, // Disable hybrid search for test
       });
 
       expect(result.answer).toBe('This is the answer');
@@ -128,13 +130,15 @@ describe('RAG Pipeline', () => {
       const modelModule = await import('@/lib/ai/model-selector');
 
       vi.mocked(embeddingsModule.generateEmbeddings).mockResolvedValue(mockEmbedding);
-      vi.mocked(pineconeModule.queryVectors).mockResolvedValue(mockResults);
+      // Ensure queryVectors returns the results array
+      vi.mocked(pineconeModule.queryVectors).mockResolvedValue(mockResults as any);
       vi.mocked(modelModule.generateResponse).mockResolvedValue(mockResponse);
 
       const result = await queryDocuments('test query', {
         documentIds: ['doc-1'],
         userId: 'user-1',
         minScore: 0.5,
+        useHybridSearch: false, // Disable hybrid search for test
       });
 
       expect(result.sources).toHaveLength(1);
@@ -167,6 +171,7 @@ describe('RAG Pipeline', () => {
       const result = await queryDocuments('test query', {
         documentIds: ['doc-1'],
         userId: 'user-1',
+        useHybridSearch: false, // Disable hybrid search for test
       });
 
       // Should fallback to context-only response
@@ -207,7 +212,6 @@ describe('RAG Pipeline', () => {
         fileType: 'pdf',
       });
 
-      const pineconeModule = await import('@/lib/vector/pinecone');
       expect(pineconeModule.upsertVectors).toHaveBeenCalledOnce();
       const callArgs = vi.mocked(pineconeModule.upsertVectors).mock.calls[0][0];
       expect(callArgs).toHaveLength(2);

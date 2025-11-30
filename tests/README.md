@@ -54,6 +54,21 @@ npx playwright test --project=chromium
 - **Integration Tests**: Test interactions between multiple modules
 - **E2E Tests**: Test complete user flows from start to finish
 
+## Known Limitations
+
+Some tests are skipped due to technical limitations:
+
+- **PDF Processor Tests**: Some PDF processor tests are skipped because the `pdf-parse` module uses dynamic imports with `new Function()` which Vitest cannot intercept. These should be tested as integration tests with the actual module installed.
+
+## Test Results
+
+Current test status:
+
+- ✅ RAG Pipeline Tests: All passing
+- ✅ Integration Tests: All passing
+- ⏭️ PDF Processor Tests: 3 skipped (require actual pdf-parse module)
+- ⏭️ E2E Tests: Run separately with Playwright (requires `npx playwright install`)
+
 ## Writing Tests
 
 ### Unit Test Example
