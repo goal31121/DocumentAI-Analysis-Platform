@@ -76,13 +76,12 @@ export function DocumentAnalysis({ documentId, fileName, className }: DocumentAn
             className="h-full m-0 flex flex-col min-h-0 flex-1"
           >
             <div className="flex h-full">
-              {/* Conversation Sidebar */}
+              {/* Conversation Sidebar - width is now controlled internally */}
               <ConversationList
                 documentId={documentId}
                 currentConversationId={conversationId}
                 onSelectConversation={handleSelectConversation}
                 onNewConversation={handleNewConversation}
-                className="w-64 shrink-0"
               />
 
               {/* Chat Interface */}
