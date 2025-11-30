@@ -50,7 +50,10 @@ export function EmptyState({ title, description, icon, action, className, varian
 
   if (variant === 'illustrated') {
     return (
-      <Card className={cn('border-dashed', className)}>
+      <Card
+        className={cn('border-dashed', className)}
+        data-testid="empty-state"
+      >
         <CardContent className="flex flex-col items-center justify-center py-12 px-6">
           <div className="relative mb-6">
             {/* Decorative background circle */}
