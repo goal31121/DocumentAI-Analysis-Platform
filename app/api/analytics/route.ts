@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth/server';
 import { db } from '@/lib/db';
-import { documents, usage } from '@/lib/db/schema';
-import { eq, and, gte, lte, sql, desc } from 'drizzle-orm';
+import { documents } from '@/lib/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { getUsageStats } from '@/lib/ai/cost-tracker';
 
 /**
