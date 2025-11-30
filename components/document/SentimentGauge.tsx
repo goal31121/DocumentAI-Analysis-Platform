@@ -1,17 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Loader2, RefreshCw, Smile, Frown, Meh } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
-
-export interface SentimentData {
-  sentiment: 'positive' | 'neutral' | 'negative';
-  score: number; // 0-1
-  confidence: number; // 0-1
-}
+import { useDocumentSentiment, useInvalidateSentiment } from '@/lib/hooks/useDocumentSentiment';
 
 export interface SentimentGaugeProps {
   documentId: string;
@@ -19,37 +14,18 @@ export interface SentimentGaugeProps {
 }
 
 export function SentimentGauge({ documentId, className }: SentimentGaugeProps) {
-  const [sentiment, setSentiment] = useState<SentimentData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Use React Query hook - automatically handles caching, refetching, and state management
+  const { data, isLoading, error, refetch, isFetching } = useDocumentSentiment(documentId);
+  const invalidateSentiment = useInvalidateSentiment();
 
-  const fetchSentiment = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/ai/sentiment?documentId=${documentId}`);
-
-      if (!response.ok) {
-        throw new Error('Failed to analyze sentiment');
-      }
-
-      const data = await response.json();
-      if (data.success && data.sentiment) {
-        setSentiment(data.sentiment);
-      } else {
-        throw new Error(data.error || 'Failed to analyze sentiment');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sentiment');
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = () => {
+    // Force refetch by invalidating cache
+    invalidateSentiment(documentId);
+    refetch();
   };
 
-  useEffect(() => {
-    fetchSentiment();
-  }, [documentId]);
+  const sentiment = data?.sentiment;
+  const errorMessage = error instanceof Error ? error.message : 'Failed to load sentiment';
 
   const getSentimentIcon = () => {
     if (!sentiment) return null;
@@ -94,14 +70,14 @@ export function SentimentGauge({ documentId, className }: SentimentGaugeProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={fetchSentiment}
-          disabled={loading}
+          onClick={handleRefresh}
+          disabled={isFetching}
         >
-          <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+          <RefreshCw className={cn('h-3 w-3', isFetching && 'animate-spin')} />
         </Button>
       </div>
 
-      {loading && !sentiment && (
+      {isLoading && !sentiment && (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
@@ -109,11 +85,11 @@ export function SentimentGauge({ documentId, className }: SentimentGaugeProps) {
 
       {error && (
         <div className="text-sm text-destructive py-4">
-          <p>{error}</p>
+          <p>{errorMessage}</p>
           <Button
             variant="link"
             size="sm"
-            onClick={fetchSentiment}
+            onClick={handleRefresh}
             className="p-0 h-auto mt-2"
           >
             Try again
