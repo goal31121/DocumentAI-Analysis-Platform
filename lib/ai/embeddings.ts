@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getCachedEmbedding, cacheEmbedding } from '@/lib/cache/redis-cache';
 
 // Note: In Next.js runtime, environment variables are automatically loaded.
 // For standalone scripts, import '../scripts/load-env' at the top of the script file.
@@ -28,6 +29,12 @@ export async function generateEmbeddings(text: string): Promise<number[]> {
     throw new Error('Text cannot be empty');
   }
 
+  // Check cache first
+  const cached = await getCachedEmbedding(text);
+  if (cached) {
+    return cached;
+  }
+
   try {
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-large',
@@ -38,7 +45,12 @@ export async function generateEmbeddings(text: string): Promise<number[]> {
       throw new Error('No embeddings returned from OpenAI API');
     }
 
-    return response.data[0].embedding;
+    const embedding = response.data[0].embedding;
+
+    // Cache the embedding
+    await cacheEmbedding(text, embedding);
+
+    return embedding;
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(`Failed to generate embeddings: ${error.message}`);
