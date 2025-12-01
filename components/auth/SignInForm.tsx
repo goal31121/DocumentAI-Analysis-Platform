@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { SocialLoginButton } from './SocialLoginButton';
 import Link from 'next/link';
 
 export function SignInForm() {
@@ -47,49 +49,76 @@ export function SignInForm() {
         <CardDescription>Enter your credentials to access your account</CardDescription>
       </CardHeader>
       <CardContent>
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
-          {error && <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>}
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
+        <div className="space-y-4">
+          {/* Social Login Buttons */}
+          <div className="space-y-3">
+            <SocialLoginButton
+              provider="google"
+              disabled={loading}
+            />
+            <SocialLoginButton
+              provider="github"
+              disabled={loading}
+            />
+            <SocialLoginButton
+              provider="microsoft"
+              disabled={loading}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <Separator />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+            </div>
           </div>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading}
+
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </Button>
-          <div className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link
-              href="/sign-up"
-              className="text-primary hover:underline"
+            {error && <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button
+              type="submit"
+              className="w-full cursor-pointer"
+              disabled={loading}
             >
-              Sign up
-            </Link>
-          </div>
-        </form>
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+            <div className="text-center text-sm text-muted-foreground">
+              Don&apos;t have an account?{' '}
+              <Link
+                href="/sign-up"
+                className="text-primary hover:underline"
+              >
+                Sign up
+              </Link>
+            </div>
+          </form>
+        </div>
       </CardContent>
     </Card>
   );

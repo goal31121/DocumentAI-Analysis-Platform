@@ -44,6 +44,60 @@ The project looks for environment variables in this order (later files override 
 - `BETTER_AUTH_SECRET` - Secret key for Better Auth
 - `BETTER_AUTH_URL` - Base URL for Better Auth
 
+### OAuth Providers (Optional but Recommended)
+
+The following OAuth providers are supported for one-click social authentication:
+
+#### Google OAuth
+
+- `GOOGLE_CLIENT_ID` - Google OAuth 2.0 Client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth 2.0 Client Secret
+
+**Setup Instructions:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Navigate to **APIs & Services** > **Credentials**
+4. Click **Create Credentials** > **OAuth 2.0 Client IDs**
+5. Set **Authorized Redirect URIs**:
+   - Development: `http://localhost:3000/api/auth/callback/google`
+   - Production: `https://yourdomain.com/api/auth/callback/google`
+6. Copy the Client ID and Client Secret to your `.env.local`
+
+#### GitHub OAuth
+
+- `GITHUB_CLIENT_ID` - GitHub OAuth App Client ID
+- `GITHUB_CLIENT_SECRET` - GitHub OAuth App Client Secret
+
+**Setup Instructions:**
+
+1. Go to GitHub Settings > Developer settings > OAuth Apps
+2. Click **New OAuth App**
+3. Set **Authorization callback URL**:
+   - Development: `http://localhost:3000/api/auth/callback/github`
+   - Production: `https://yourdomain.com/api/auth/callback/github`
+4. Copy the Client ID and Client Secret to your `.env.local`
+
+#### Microsoft OAuth
+
+- `MICROSOFT_CLIENT_ID` - Microsoft Azure App Registration Client ID
+- `MICROSOFT_CLIENT_SECRET` - Microsoft Azure App Registration Client Secret
+- `MICROSOFT_TENANT_ID` - Microsoft Tenant ID (defaults to `common` if not set)
+
+**Setup Instructions:**
+
+1. Go to [Azure Portal](https://portal.azure.com/)
+2. Navigate to **Azure Active Directory** > **App registrations**
+3. Click **New registration**
+4. Set **Redirect URI**:
+   - Development: `http://localhost:3000/api/auth/callback/microsoft`
+   - Production: `https://yourdomain.com/api/auth/callback/microsoft`
+5. Copy the Application (client) ID and create a client secret
+6. Copy the Tenant ID (or use `common` for multi-tenant)
+7. Add values to your `.env.local`
+
+**Note:** OAuth providers are optional. If credentials are not provided, the social login buttons will still appear but authentication will fail. You can remove providers you don't want to use by not setting their credentials.
+
 ## Usage Patterns
 
 ### In Next.js Code (Automatic)
