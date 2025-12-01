@@ -2,8 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { authClient } from '@/lib/auth-client';
 
 export function Hero() {
+  const { data: session } = authClient.useSession();
+
   return (
     <section className="relative min-h-screen flex items-center justify-center pt-16 bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-32">
@@ -19,13 +22,23 @@ export function Hero() {
           </p>
 
           <div className="flex justify-center">
-            <Button
-              size="lg"
-              asChild
-              className="bg-foreground text-background hover:bg-foreground/90 rounded-md px-8 py-6 text-base font-medium transition-colors"
-            >
-              <Link href="/sign-up">Try DocAI</Link>
-            </Button>
+            {session?.user ? (
+              <Button
+                size="lg"
+                asChild
+                className="bg-foreground text-background hover:bg-foreground/90 rounded-md px-8 py-6 text-base font-medium transition-colors"
+              >
+                <Link href="/documents">Go to Dashboard</Link>
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                asChild
+                className="bg-foreground text-background hover:bg-foreground/90 rounded-md px-8 py-6 text-base font-medium transition-colors"
+              >
+                <Link href="/sign-up">Try DocAI</Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>
