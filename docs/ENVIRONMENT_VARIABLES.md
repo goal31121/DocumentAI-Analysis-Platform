@@ -44,6 +44,29 @@ The project looks for environment variables in this order (later files override 
 - `BETTER_AUTH_SECRET` - Secret key for Better Auth
 - `BETTER_AUTH_URL` - Base URL for Better Auth
 
+### Stripe (Required for Subscriptions)
+
+- `STRIPE_SECRET_KEY` - Stripe secret key (sk_...)
+- `STRIPE_PUBLISHABLE_KEY` - Stripe publishable key (pk_...)
+- `STRIPE_WEBHOOK_SECRET` - Webhook signing secret (whsec_...)
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` - Stripe publishable key for client-side (same as STRIPE_PUBLISHABLE_KEY)
+
+**Setup Instructions:**
+
+1. Create a Stripe account at https://stripe.com
+2. Get API keys from Dashboard → Developers → API keys
+3. Create products:
+   - **Pro Plan**: $29/month recurring subscription
+   - **Enterprise Plan**: Custom pricing (contact sales)
+4. Set up webhook endpoint: `https://yourdomain.com/api/subscriptions/webhook`
+5. Configure webhook events:
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.payment_succeeded`
+   - `invoice.payment_failed`
+6. Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`
+
 ### OAuth Providers (Optional but Recommended)
 
 The following OAuth providers are supported for one-click social authentication:
