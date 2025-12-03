@@ -6,6 +6,7 @@ import { uploadFileToS3, generateS3Key } from '@/lib/storage/s3';
 import { processDocumentQueue } from '@/lib/queue/processor';
 import { rateLimitMiddleware } from '@/lib/rate-limit/middleware';
 import { checkUploadQuotas } from '@/lib/quota/quota-manager';
+import { getUserSubscription } from '@/lib/subscription/service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,14 +33,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid file type. Only PDF, DOCX, and XLSX are supported' }, { status: 400 });
     }
 
+    // Get user's subscription tier
+    const userTier = await getUserSubscription(session.user.id);
+
     // Check rate limit
-    const { response: rateLimitResponse } = await rateLimitMiddleware(session.user.id, 'free', 'upload');
+    const { response: rateLimitResponse } = await rateLimitMiddleware(session.user.id, userTier, 'upload');
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
 
-    // Check quotas (default to 'free' tier - in production, get from user's subscription)
-    const quotaCheck = await checkUploadQuotas(session.user.id, 'free', file.size);
+    // Check quotas using user's actual subscription tier
+    const quotaCheck = await checkUploadQuotas(session.user.id, userTier, file.size);
     if (!quotaCheck.allowed) {
       return NextResponse.json(
         {
