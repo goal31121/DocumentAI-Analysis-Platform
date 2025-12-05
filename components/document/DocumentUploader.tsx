@@ -8,6 +8,8 @@ import { Progress } from '@/components/ui/progress';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
+// import { useRouter } from 'next/navigation';
 
 type FileWithProgress = {
   file: File;
@@ -29,6 +31,8 @@ const ALLOWED_TYPES = [
 
 export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
   const [files, setFiles] = useState<FileWithProgress[]>([]);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+  // const router = useRouter();
 
   const uploadFile = useCallback(
     async (file: File) => {
@@ -89,8 +93,19 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         });
 
         if (!response.ok) {
-          throw new Error('Upload failed');
+          const errorData = await response.json().catch(() => ({}));
+
+          // Check if it's a quota error
+          if (response.status === 403 && errorData.error === 'Quota exceeded') {
+            setQuotaError(errorData.message || 'You have reached your quota limit');
+            throw new Error('Quota exceeded');
+          }
+
+          throw new Error(errorData.message || errorData.error || 'Upload failed');
         }
+
+        // Clear quota error on success
+        setQuotaError(null);
 
         const data = await response.json();
 
@@ -180,8 +195,46 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const handleUpgrade = async () => {
+    try {
+      // Get Pro price ID from environment or use a default
+      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
+      if (!proPriceId) {
+        toast.error('Stripe is not configured. Please contact support.');
+        return;
+      }
+
+      const response = await fetch('/api/subscriptions/create-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ tier: 'pro', priceId: proPriceId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create checkout session');
+      }
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      toast.error('Failed to start checkout. Please try again.');
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {quotaError && (
+        <UpgradePrompt
+          title="Quota Limit Reached"
+          message={quotaError + ' Upgrade to Pro to process more documents simultaneously and unlock higher limits!'}
+          onUpgrade={handleUpgrade}
+          variant="error"
+        />
+      )}
       <Card
         {...getRootProps()}
         className={cn(
@@ -223,7 +276,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <span className="text-2xl">{getFileIcon(fileWithProgress.file.type)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -235,7 +288,7 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                   variant="ghost"
                   size="icon"
                   onClick={() => removeFile(index)}
-                  className="flex-shrink-0 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  className="shrink-0 hover:bg-destructive/10 hover:text-destructive transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </Button>
