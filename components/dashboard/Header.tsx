@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { QuotaWarning } from '@/components/subscription/QuotaWarning';
 
 export function Header() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center space-x-3">
+          <QuotaWarning />
           <ThemeToggle />
 
           <TooltipProvider>
