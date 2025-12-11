@@ -164,7 +164,7 @@ function SubscriptionPageContent() {
   const { subscription, quota } = data;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 pb-12 space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Subscription</h1>
         <p className="text-muted-foreground">Manage your subscription and view usage</p>
