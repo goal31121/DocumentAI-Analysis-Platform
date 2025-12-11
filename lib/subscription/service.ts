@@ -150,10 +150,11 @@ export async function checkSubscriptionStatus(userId: string): Promise<boolean> 
 /**
  * Get or create Stripe customer ID for user
  * @param userId - User ID
- * @param email - User email
+ * @param _email - User email (reserved for future use)
  * @returns Stripe customer ID
  */
-export async function getOrCreateStripeCustomer(userId: string, email: string): Promise<string | null> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function getOrCreateStripeCustomer(userId: string, _email: string): Promise<string | null> {
   try {
     const [user] = await db
       .select({

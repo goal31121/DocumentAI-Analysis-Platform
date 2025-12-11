@@ -10,7 +10,7 @@ export function getStripeClient(): Stripe {
   }
 
   return new Stripe(env.STRIPE_SECRET_KEY, {
-    apiVersion: '2024-12-18.acacia',
+    apiVersion: '2025-11-17.clover',
     typescript: true,
   });
 }
@@ -144,22 +144,20 @@ export function mapStripeStatusToSubscriptionStatus(stripeStatus: Stripe.Subscri
 }
 
 /**
- * Map Stripe subscription to subscription tier
- * This should match your Stripe product/price configuration
+ * Map Stripe price ID to subscription tier
  */
 export function mapStripePriceToTier(priceId: string): 'free' | 'pro' | 'enterprise' {
-  // You'll need to set these price IDs in your Stripe dashboard
-  // For now, we'll use environment variables or a mapping
   const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
   const enterprisePriceId = process.env.STRIPE_ENTERPRISE_PRICE_ID;
 
-  if (priceId === proPriceId) {
+  if (proPriceId && priceId === proPriceId) {
     return 'pro';
   }
-  if (priceId === enterprisePriceId) {
+  if (enterprisePriceId && priceId === enterprisePriceId) {
     return 'enterprise';
   }
 
   // Default to free if unknown
+  console.warn(`Unknown Stripe price ID: ${priceId}, defaulting to free tier`);
   return 'free';
 }

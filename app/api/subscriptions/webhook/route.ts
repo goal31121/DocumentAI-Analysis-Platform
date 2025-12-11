@@ -53,20 +53,26 @@ export async function POST(request: NextRequest) {
       }
 
       case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice;
-        if (invoice.subscription) {
-          const subscription = await getStripeSubscription(invoice.subscription as string);
+        const invoice = event.data.object as Stripe.Invoice & { subscription?: string | Stripe.Subscription | null };
+        const subscriptionRef = invoice.subscription;
+        if (subscriptionRef) {
+          const subscriptionId = typeof subscriptionRef === 'string' ? subscriptionRef : subscriptionRef.id;
+          const subscription = await getStripeSubscription(subscriptionId);
           if (subscription) {
             await handleSubscriptionUpdate(subscription);
+          } else {
+            console.error(`[Webhook] Could not retrieve subscription: ${subscriptionId}`);
           }
         }
         break;
       }
 
       case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        if (invoice.subscription) {
-          const subscription = await getStripeSubscription(invoice.subscription as string);
+        const invoice = event.data.object as Stripe.Invoice & { subscription?: string | Stripe.Subscription | null };
+        const subscriptionRef = invoice.subscription;
+        if (subscriptionRef) {
+          const subscriptionId = typeof subscriptionRef === 'string' ? subscriptionRef : subscriptionRef.id;
+          const subscription = await getStripeSubscription(subscriptionId);
           if (subscription) {
             await handleSubscriptionUpdate(subscription);
           }
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest) {
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        break;
     }
 
     return NextResponse.json({ received: true });
@@ -97,14 +103,14 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const [user] = await db.select().from(users).where(eq(users.stripeCustomerId, customerId)).limit(1);
 
   if (!user) {
-    console.error(`User not found for Stripe customer: ${customerId}`);
+    console.error(`[Webhook] User not found for Stripe customer: ${customerId}`);
     return;
   }
 
   // Get price ID from subscription
   const priceId = subscription.items.data[0]?.price.id;
   if (!priceId) {
-    console.error('No price ID found in subscription');
+    console.error('[Webhook] No price ID found in subscription');
     return;
   }
 
@@ -113,7 +119,11 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const status = mapStripeStatusToSubscriptionStatus(subscription.status);
 
   // Calculate expiration date (end of current period)
-  const expiresAt = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : undefined;
+  // current_period_end is on the subscription item in newer Stripe API versions
+  const subscriptionItem = subscription.items.data[0];
+  const expiresAt = subscriptionItem?.current_period_end
+    ? new Date(subscriptionItem.current_period_end * 1000)
+    : undefined;
 
   // Update user subscription
   await updateUserSubscription(user.id, tier, status, {
