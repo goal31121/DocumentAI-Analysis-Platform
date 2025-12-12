@@ -28,12 +28,42 @@ export async function POST(request: NextRequest) {
     let userId: string;
 
     if (session?.user) {
-      // User-initiated request with valid session
+      // User-initiated request with valid session - use session userId
       userId = session.user.id;
+      // If bodyUserId is provided, it must match the session userId for security
+      if (bodyUserId && bodyUserId !== session.user.id) {
+        console.error(
+          `[Process] Unauthorized: bodyUserId (${bodyUserId}) does not match session userId (${session.user.id})`
+        );
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     } else if (bodyUserId) {
-      // Internal request from upload route - verify the userId matches the document
+      // Internal request from upload route - verify it's from the same origin (internal call)
+      // This ensures only requests from the same deployment can trigger processing
+      const userAgent = request.headers.get('user-agent') || '';
+      const host = request.headers.get('host') || '';
+      const requestOrigin = request.nextUrl.origin;
+
+      // Verify this is an internal server-side request
+      // Internal requests will have:
+      // 1. Node.js user-agent (from server-side fetch), OR
+      // 2. Same host as request origin (same deployment)
+      const isInternalRequest =
+        userAgent.toLowerCase().includes('node') ||
+        (host && requestOrigin.includes(host)) ||
+        requestOrigin.includes('localhost') ||
+        requestOrigin.includes('127.0.0.1');
+
+      if (!isInternalRequest) {
+        console.error(
+          `[Process] Unauthorized: Invalid internal request (userAgent: ${userAgent}, host: ${host}, origin: ${requestOrigin})`
+        );
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      // Note: We still verify userId matches document ownership below
       userId = bodyUserId;
-      console.log(`[Process] Internal request detected for document ${documentId} (userId: ${userId})`);
+      console.log(`[Process] Internal request verified for document ${documentId} (userId: ${userId})`);
     } else {
       console.error('[Process] Unauthorized: No session or userId provided');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

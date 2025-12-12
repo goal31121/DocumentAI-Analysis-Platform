@@ -50,17 +50,19 @@ export async function processDocumentQueue(
       `[Processor] Step 2: Successfully extracted text from document ${documentId} in ${extractDuration}ms (text length: ${processingResult.text.length})`
     );
 
-    // Step 3: Update document with extracted metadata
+    // Step 3: Update document with extracted metadata (keep status as 'processing' until all steps complete)
     console.log(`[Processor] Step 3: Updating document ${documentId} with extracted metadata`);
     await db
       .update(documents)
       .set({
-        status: 'completed',
         metadata: processingResult.metadata,
         updatedAt: new Date(),
+        // Keep status as 'processing' - will be updated to 'completed' after all steps succeed
       })
       .where(eq(documents.id, documentId));
-    console.log(`[Processor] Step 3: Successfully updated document ${documentId} with metadata`);
+    console.log(
+      `[Processor] Step 3: Successfully updated document ${documentId} with metadata (status remains 'processing')`
+    );
 
     // Step 4: Chunk the document
     console.log(`[Processor] Step 4: Chunking document ${documentId}`);
@@ -82,6 +84,17 @@ export async function processDocumentQueue(
     const indexDuration = Date.now() - indexStartTime;
     console.log(`[Processor] Step 5: Successfully indexed chunks for document ${documentId} in ${indexDuration}ms`);
 
+    // Step 6: Update status to 'completed' only after all processing steps succeed
+    console.log(`[Processor] Step 6: Updating document ${documentId} status to 'completed'`);
+    await db
+      .update(documents)
+      .set({
+        status: 'completed',
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, documentId));
+    console.log(`[Processor] Step 6: Successfully updated document ${documentId} status to 'completed'`);
+
     const totalDuration = Date.now() - startTime;
     console.log(
       `[Processor] Successfully completed processing pipeline for document ${documentId} in ${totalDuration}ms`
@@ -100,13 +113,20 @@ export async function processDocumentQueue(
       fileType,
     });
 
-    // Update status to error
+    // Update status to error - preserve existing metadata and append error information
     try {
+      // Fetch current document to preserve existing metadata (e.g., from Step 3 extraction)
+      const [currentDocument] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+
+      const existingMetadata = (currentDocument?.metadata as object) || {};
+
       await db
         .update(documents)
         .set({
           status: 'error',
           metadata: {
+            ...existingMetadata,
+            // Append error information without overwriting existing metadata
             error: errorMessage,
             errorAt: new Date().toISOString(),
             errorStack: errorStack?.substring(0, 1000), // Limit stack trace length
@@ -114,7 +134,7 @@ export async function processDocumentQueue(
           updatedAt: new Date(),
         })
         .where(eq(documents.id, documentId));
-      console.log(`[Processor] Updated document ${documentId} status to 'error'`);
+      console.log(`[Processor] Updated document ${documentId} status to 'error' (preserved existing metadata)`);
     } catch (dbError) {
       // If we can't update the database, log it but don't mask the original error
       console.error(`[Processor] Failed to update document ${documentId} status to 'error':`, dbError);
