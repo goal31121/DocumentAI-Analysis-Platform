@@ -1,7 +1,8 @@
 import { getFileFromS3 } from '../storage/s3';
 // Static import so webpack can trace and Next.js can include in Vercel deployment
-// This works with serverExternalPackages to load from node_modules at runtime
-import { PDFParse } from 'pdf-parse';
+// Using pdf-parse v1.1.1 which works in serverless environments (no DOM dependencies)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse');
 
 /**
  * PDF processing result
@@ -22,37 +23,26 @@ export interface PDFProcessingResult {
 
 /**
  * Process a PDF file and extract text content
- * Uses pdf-parse v2 API with PDFParse class
+ * Uses pdf-parse v1 API (function-based)
  * @param fileBuffer - PDF file buffer
  * @returns Processing result with extracted text and metadata
  */
 export async function processPDF(fileBuffer: Buffer): Promise<PDFProcessingResult> {
-  const parser = new PDFParse({ data: fileBuffer });
-
   try {
-    // Extract text using v2 API
-    const textResult = await parser.getText();
-
-    // Extract metadata/info
-    const infoResult = await parser.getInfo({ parsePageInfo: true });
-
-    // Access metadata from InfoResult.info (PDF Info dictionary)
-    const info = infoResult.info || {};
-
-    // Get dates from DateNode helper
-    const dateNode = infoResult.getDateNode();
+    // pdf-parse v1 API - pass buffer directly to the function
+    const data = await pdfParse(fileBuffer);
 
     return {
-      text: textResult.text,
-      pageCount: infoResult.total || textResult.pages?.length || 0,
+      text: data.text || '',
+      pageCount: data.numpages || 0,
       metadata: {
-        title: info?.Title,
-        author: info?.Author,
-        subject: info?.Subject,
-        creator: info?.Creator,
-        producer: info?.Producer,
-        creationDate: dateNode?.CreationDate || undefined,
-        modificationDate: dateNode?.ModDate || undefined,
+        title: data.info?.Title,
+        author: data.info?.Author,
+        subject: data.info?.Subject,
+        creator: data.info?.Creator,
+        producer: data.info?.Producer,
+        creationDate: data.info?.CreationDate ? new Date(data.info.CreationDate) : undefined,
+        modificationDate: data.info?.ModDate ? new Date(data.info.ModDate) : undefined,
       },
     };
   } catch (error) {
@@ -60,9 +50,6 @@ export async function processPDF(fileBuffer: Buffer): Promise<PDFProcessingResul
       throw new Error(`Failed to process PDF: ${error.message}`);
     }
     throw new Error('Failed to process PDF: Unknown error');
-  } finally {
-    // Always destroy parser to free memory
-    await parser.destroy();
   }
 }
 
