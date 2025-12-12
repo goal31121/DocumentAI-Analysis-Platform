@@ -10,69 +10,114 @@ import { eq, and } from 'drizzle-orm';
  * Process a document (extract text, chunk, generate embeddings, index)
  */
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let documentId: string | undefined;
+
   try {
+    const body = await request.json().catch(() => ({}));
+    documentId = body.documentId;
+    const { retry, userId: bodyUserId } = body;
+
+    if (!documentId) {
+      console.error('[Process] Missing documentId in request body');
+      return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
+    }
+
+    // Try to get session (for user-initiated requests)
     const session = await getServerSession();
-    if (!session?.user) {
+    let userId: string;
+
+    if (session?.user) {
+      // User-initiated request with valid session
+      userId = session.user.id;
+    } else if (bodyUserId) {
+      // Internal request from upload route - verify the userId matches the document
+      userId = bodyUserId;
+      console.log(`[Process] Internal request detected for document ${documentId} (userId: ${userId})`);
+    } else {
+      console.error('[Process] Unauthorized: No session or userId provided');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { documentId, retry } = body;
-
-    if (!documentId) {
-      return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
-    }
+    console.log(`[Process] Starting processing for document ${documentId} (user: ${userId}, retry: ${retry || false})`);
 
     // Verify document belongs to user
     const [document] = await db
       .select()
       .from(documents)
-      .where(and(eq(documents.id, documentId), eq(documents.userId, session.user.id)))
+      .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
       .limit(1);
 
     if (!document) {
+      console.error(`[Process] Document not found: ${documentId} for user ${userId}`);
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
     // Check if document is already processing
     if (document.status === 'processing') {
+      console.log(`[Process] Document ${documentId} is already being processed`);
       return NextResponse.json({ message: 'Document is already being processed', documentId }, { status: 200 });
     }
 
     // Check if document is already completed
     if (document.status === 'completed' && !retry) {
+      console.log(`[Process] Document ${documentId} is already completed`);
       return NextResponse.json({ message: 'Document is already processed', documentId }, { status: 200 });
     }
 
-    // Process document asynchronously
-    // Note: In production, you might want to use a proper job queue (Bull, BullMQ, etc.)
-    // For now, we'll process it in the background without blocking the response
-    if (retry) {
-      // Retry processing
-      retryDocumentProcessing(documentId).catch((error) => {
-        console.error(`Failed to retry processing document ${documentId}:`, error);
-      });
-    } else {
-      // Start processing
-      processDocumentQueue(
+    // Process document - await to ensure it completes before function terminates
+    // This ensures errors are caught and logged properly
+    try {
+      if (retry) {
+        console.log(`[Process] Retrying processing for document ${documentId}`);
+        await retryDocumentProcessing(documentId);
+      } else {
+        console.log(
+          `[Process] Processing document ${documentId} (fileType: ${document.fileType}, s3Key: ${document.s3Key})`
+        );
+        await processDocumentQueue(documentId, userId, document.s3Key, document.fileType as 'pdf' | 'docx' | 'xlsx');
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`[Process] Successfully processed document ${documentId} in ${duration}ms`);
+    } catch (processingError) {
+      const duration = Date.now() - startTime;
+      const errorMessage = processingError instanceof Error ? processingError.message : 'Unknown error';
+      const errorStack = processingError instanceof Error ? processingError.stack : undefined;
+
+      console.error(`[Process] Failed to process document ${documentId} after ${duration}ms:`, {
+        error: errorMessage,
+        stack: errorStack,
         documentId,
-        session.user.id,
-        document.s3Key,
-        document.fileType as 'pdf' | 'docx' | 'xlsx'
-      ).catch((error) => {
-        console.error(`Failed to process document ${documentId}:`, error);
+        userId,
+        fileType: document.fileType,
       });
+
+      // Re-throw to be caught by outer try-catch
+      throw processingError;
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Document processing started',
+      message: 'Document processing completed',
       documentId,
     });
   } catch (error) {
-    console.error('Process error:', error);
+    const duration = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    console.error(`[Process] Process route error after ${duration}ms:`, {
+      error: errorMessage,
+      stack: errorStack,
+      documentId: documentId || 'unknown',
+    });
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process document' },
+      {
+        error: errorMessage,
+        documentId: documentId || undefined,
+      },
       { status: 500 }
     );
   }

@@ -3,7 +3,6 @@ import { getServerSession } from '@/lib/auth/server';
 import { db } from '@/lib/db';
 import { documents } from '@/lib/db/schema';
 import { uploadFileToS3, generateS3Key } from '@/lib/storage/s3';
-import { processDocumentQueue } from '@/lib/queue/processor';
 import { rateLimitMiddleware } from '@/lib/rate-limit/middleware';
 import { checkUploadQuotas } from '@/lib/quota/quota-manager';
 import { getUserSubscription } from '@/lib/subscription/service';
@@ -94,16 +93,30 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // Trigger document processing asynchronously (fire-and-forget)
-    // Processing will extract text, chunk, generate embeddings, and index in vector DB
-    // Note: In production, use a proper job queue (Bull, BullMQ, etc.) instead
-    processDocumentQueue(document.id, session.user.id, document.s3Key, fileType as 'pdf' | 'docx' | 'xlsx').catch(
-      (error) => {
-        console.error(`Failed to process document ${document.id}:`, error);
-        // Don't fail the upload if processing fails
-        // The user can manually trigger processing later via the API
-      }
-    );
+    // Trigger document processing in a separate serverless function via HTTP
+    // This ensures processing runs independently and doesn't get killed by function timeouts
+    // Use the request origin to build the internal API URL
+    const baseUrl = request.nextUrl.origin;
+    const processUrl = `${baseUrl}/api/documents/process`;
+
+    // Trigger processing asynchronously (non-blocking)
+    // Don't await - let it run in the background
+    fetch(processUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Forward the authorization cookie so the process route can authenticate
+        Cookie: request.headers.get('cookie') || '',
+      },
+      body: JSON.stringify({
+        documentId: document.id,
+        userId: session.user.id, // Pass userId for internal authentication
+      }),
+    }).catch((error) => {
+      // Log error but don't fail the upload
+      // The user can manually trigger processing later via the API if needed
+      console.error(`[Upload] Failed to trigger processing for document ${document.id}:`, error);
+    });
 
     return NextResponse.json({
       success: true,
