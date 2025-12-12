@@ -51,6 +51,40 @@ const nextConfig: NextConfig = {
       canvas: canvasStubPath,
     };
 
+    // Externalize packages with native dependencies for server-side builds
+    // These packages should be loaded from node_modules at runtime, not bundled
+    // This works together with serverExternalPackages to ensure they're included in deployment
+    if (isServer) {
+      config.externals = config.externals || [];
+      // Ensure externals is an array
+      if (typeof config.externals === 'function') {
+        const originalExternals = config.externals;
+        config.externals = [
+          originalExternals,
+          {
+            'pdf-parse': 'commonjs pdf-parse',
+            mammoth: 'commonjs mammoth',
+            xlsx: 'commonjs xlsx',
+          },
+        ];
+      } else if (Array.isArray(config.externals)) {
+        config.externals.push({
+          'pdf-parse': 'commonjs pdf-parse',
+          mammoth: 'commonjs mammoth',
+          xlsx: 'commonjs xlsx',
+        });
+      } else {
+        config.externals = [
+          config.externals,
+          {
+            'pdf-parse': 'commonjs pdf-parse',
+            mammoth: 'commonjs mammoth',
+            xlsx: 'commonjs xlsx',
+          },
+        ];
+      }
+    }
+
     // Set fallback for Node.js modules (mainly for client-side)
     if (!isServer) {
       config.resolve.fallback = {
