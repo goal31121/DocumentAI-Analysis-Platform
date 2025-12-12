@@ -8,6 +8,16 @@ const nextConfig: NextConfig = {
   // Set the workspace root to silence the multiple lockfiles warning
   outputFileTracingRoot: process.cwd(),
 
+  // External packages that should not be bundled (for serverless functions)
+  // These packages will be loaded from node_modules at runtime
+  // Required for packages with native dependencies or large dependencies
+  serverExternalPackages: [
+    'pdf-parse', // PDF parsing library with native dependencies
+    'mammoth', // DOCX parser
+    'xlsx', // Excel parser
+    'canvas', // Canvas library (may be used by some dependencies)
+  ],
+
   // Production optimizations
   compress: true,
   poweredByHeader: false,
