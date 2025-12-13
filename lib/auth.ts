@@ -28,11 +28,12 @@ export const auth = betterAuth({
       clientId: process.env.GITHUB_CLIENT_ID || '',
       clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
     },
-    microsoft: {
-      clientId: process.env.MICROSOFT_CLIENT_ID || '',
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
-      tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
-    },
+    // Temporarily disabled, would comment back in when Microsoft OAuth credentials are added
+    // microsoft: {
+    //   clientId: process.env.MICROSOFT_CLIENT_ID || '',
+    //   clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
+    //   tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
+    // },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
